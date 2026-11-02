@@ -220,7 +220,7 @@ export default {
   /* ================= the chapter ================= */
   cam(pos, look, dur = 2.5, fov, e) { return this.engine.rig.move({ pos, look, dur, fov, e }); },
   resetBoy() {
-    const boy = this.boy; boy.anim = null; boy.look(null); boy.expression({}); boy.pose('stand', true);
+    const boy = this.boy; this.silhouette(1); boy.anim = null; boy.look(null); boy.expression({}); boy.pose('stand', true);
     boy.root.position.set(0.1, -0.8, 4.2); boy.root.rotation.y = PI;
     this.laps.forEach(e => (e.visible = false)); this.myEnv.visible = false;
   },
@@ -267,8 +267,18 @@ export default {
     this.laps[0].visible = false;
     await this.stageChoice(D);
   },
+  /** k = 1 normal, k → 0.12 the boy reads as a pure silhouette against the street */
+  silhouette(k) {
+    this.boy.root.traverse(o => {
+      if (!o.isMesh || !o.material.color) return;
+      const m = o.material; m.userData.c0 ??= m.color.clone(); m.userData.cc ??= m.clearcoat ?? 0;
+      m.color.copy(m.userData.c0).multiplyScalar(k);
+      if (m.clearcoat != null) { m.clearcoat = m.userData.cc * k; m.sheen = 0.25 * k; }
+    });
+  },
   async stageChoice(D) {
     const boy = this.boy;
+    animate(k => this.silhouette(1 - 0.88 * k), 1.6);
     boy.root.position.set(0.05, 0, 1.78);
     boy.root.rotation.y = 2.05; boy.pose('stoop'); boy.set({ shL: [-55, 0, 6], elL: [-30, 0, 0] });
     boy.look(new THREE.Vector3(0.7, 1.1, 1.3), 1); boy.expression({ worry: 0.6 });
@@ -280,6 +290,7 @@ export default {
   },
   async hopOff(D) {
     const boy = this.boy;
+    animate(k => this.silhouette(0.12 + 0.88 * k), 2.5);
     this.tubeL.forEach(l => (l.userData.dim = 1));
     const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * (1 - k); this.hemi.intensity = 0.035 + 0.315 * k; this.sky.intensity = 0.08 + 0.47 * k; this.scene.environmentIntensity = 0.027 + 0.153 * k; this.engine.renderer.toneMappingExposure = e0 * (0.78 + 0.22 * k); this.follow.position.z = 6.5 + 6 * k; }, 2);
     this.targetSpeed = 0; audio.engine(1, 0.3);

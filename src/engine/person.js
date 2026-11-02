@@ -189,6 +189,16 @@ export class Person {
     return this.set({ ...base, ...p }, instant);
   }
 
+  /** darken the whole figure (k=1 normal, k≈0.15 silhouette) so procedural faces never read in key shots */
+  shade(k) {
+    this.root.traverse(o => {
+      if (!o.isMesh || !o.material.color) return;
+      const m = o.material; m.userData.c0 ??= m.color.clone();
+      m.color.copy(m.userData.c0).multiplyScalar(k);
+    });
+    return this;
+  }
+
   expression(e) { Object.assign(this.exprT, { smile: 0, sad: 0, worry: 0 }, e); return this; }
   look(target, amt = 1) { this.lookTarget = target; this.lookAmt = amt; return this; }
 

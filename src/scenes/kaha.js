@@ -41,6 +41,16 @@ function menuTex(title, items, accent) {
   });
 }
 
+// small drink-machine display: dark panel, dim glowing labels (no flat cyan slabs)
+function menuScreen(items, k = 0.5) {
+  const t = canvasTex(512, 256, (c, w, h) => {
+    c.fillStyle = '#060a0e'; c.fillRect(0, 0, w, h);
+    c.font = '600 40px Inter, sans-serif'; c.textBaseline = 'middle';
+    items.forEach((it, i) => { const y = h / (items.length + 1) * (i + 1); c.fillStyle = '#2f7fb8'; c.fillRect(24, y - 18, 10, 36); c.fillStyle = '#cfe6f5'; c.fillText(it, 52, y); c.fillStyle = '#7fb3d6'; c.textAlign = 'right'; c.fillText('₱' + (35 + i * 10), w - 24, y); c.textAlign = 'left'; });
+  });
+  return new THREE.MeshBasicMaterial({ map: t, color: new THREE.Color(1, 1, 1).multiplyScalar(k) });
+}
+
 export default {
   dof: { focus: 1.4, aperture: 0.0028, maxblur: 0.007 },
   grade: { lift: [0.0, 0.008, 0.004], gain: [0.84, 1.02, 0.88], sat: 1.0, grain: 0.075, bloom: 0.38, bloomThreshold: 0.84, exposure: 0.62, vignette: 1.15, ca: 0.0016, black: 0.035, gamma: 1.2, curve: 0.5 },
@@ -51,16 +61,17 @@ export default {
     S.background = new THREE.Color(0x121513);
     S.fog = new THREE.Fog(0x161a18, 5, 14);
     S.environment = await envFrom(engine.renderer, '/tex/kloofendal_overcast_puresky_1k.hdr');
-    S.environmentIntensity = 0.09;
+    S.environmentIntensity = 0.04;
 
     /* ---------- light: fluorescent panels, slightly green ---------- */
-    S.add(new THREE.HemisphereLight(0xd6e6dc, 0x2a2622, 0.12));
+    S.add(new THREE.HemisphereLight(0xd6e6dc, 0x2a2622, 0.04));
     const FL = 0xe9fff1;
     const panels = [[-1.2, -1.2], [1.0, -1.2], [-1.2, 2.2], [1.6, 2.2], [-1.2, 5], [1.6, 5]];
     this.rects = [];
     for (const [x, z] of panels) {
-      const r = new THREE.RectAreaLight(FL, z < 0 ? 8 : 4, 1.2, 0.3); r.position.set(x, 2.98, z); r.lookAt(x, 0, z); S.add(r); this.rects.push(r);
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), glow(FL, 2.2)); p.rotation.x = PI / 2; p.position.set(x, 2.985, z); S.add(p);
+      const dead = x === 1.0 && z < 0;   // one dead tube over the crew area: the register is the only lit island
+      const r = new THREE.RectAreaLight(FL, dead ? 0 : z < 0 ? 8 : 2.5, 1.2, 0.3); r.position.set(x, 2.98, z); r.lookAt(x, 0, z); S.add(r); this.rects.push(r);
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), dead ? std(0x2a2d2b, { rough: 0.5 }) : glow(FL, 2.2)); p.rotation.x = PI / 2; p.position.set(x, 2.985, z); S.add(p);
     }
     const key = new THREE.SpotLight(0xf2fff4, 9, 7, 0.8, 0.85, 1.6); key.position.set(-0.6, 2.9, -1.4); key.target.position.set(-1.1, 0.9, -1.1);
     key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -0.0015; key.shadow.radius = 5; S.add(key, key.target);
@@ -74,8 +85,8 @@ export default {
     const ceil = std(0xd8dcd6, { rough: 0.9 });
     S.add(at(new THREE.Mesh(new THREE.PlaneGeometry(14, 12), ceil), 0.5, 3, 2.5, 0, PI / 2));
     const tileT = canvasTex(512, 512, (c, w, h) => {
-      c.fillStyle = '#e9e6dd'; c.fillRect(0, 0, w, h);
-      c.fillStyle = '#b9b5aa'; for (let i = 0; i <= 8; i++) { c.fillRect(0, i * 64 - 2, w, 4); c.fillRect(i * 64 - 2, 0, 4, h); }
+      c.fillStyle = '#8f8d85'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#5e5b54'; for (let i = 0; i <= 8; i++) { c.fillRect(0, i * 64 - 2, w, 4); c.fillRect(i * 64 - 2, 0, 4, h); }
       for (let i = 0; i < 300; i++) { c.fillStyle = `rgba(90,80,60,${Math.random() * 0.04})`; c.fillRect(Math.random() * w, Math.random() * h, 8, 8); }
     });
     tileT.wrapS = tileT.wrapT = THREE.RepeatWrapping; tileT.repeat.set(6, 2.4);
@@ -121,7 +132,7 @@ export default {
     S.add(at(box(1.0, 0.5, 0.7, steelDark), 1.45, 2.6, -2.25)); // hood
     // drink dispenser
     S.add(at(box(0.55, 0.75, 0.45, std(0x1d1f22, { rough: 0.35, metal: 0.3 }), 0.02), 2.35, 1.375, -2.2));
-    S.add(at(box(0.5, 0.25, 0.02, glow(0x3a8fd0, 1.2)), 2.35, 1.55, -1.97));
+    S.add(at(new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.25), menuScreen(['ICED TEA', 'COLA', 'PINEAPPLE'], 0.55)), 2.35, 1.55, -1.955));
     S.add(at(box(2.8, 1.0, 0.6, steelDark), 2.6, 0.5, -2.25));
     // left end of the crew area: tiled wall, soft-serve, cup shelves, clock, door
     S.add(at(new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3), tileM), -2.55, 1.5, -1.3, PI / 2));
@@ -129,7 +140,7 @@ export default {
     S.add(at(box(0.55, 0.85, 0.6, steel, 0.03), -2.18, 1.33, -1.75));
     S.add(at(box(0.6, 0.9, 0.62, steelDark), -2.18, 0.45, -1.75));
     for (const dz of [-0.12, 0.12]) { const nz = cyl(0.02, 0.012, 0.08, steel, 10); nz.position.set(-1.92, 1.05, -1.75 + dz); S.add(nz); }
-    S.add(at(box(0.02, 0.18, 0.45, glow(0x4fa0d8, 0.9)), -1.9, 1.55, -1.75));
+    S.add(at(new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.18), menuScreen(['SUNDAE', 'FLOAT'], 0.45)), -1.89, 1.55, -1.75, PI / 2));
     for (let k = 0; k < 3; k++) {
       S.add(at(box(0.32, 0.02, 0.9, steel), -2.38, 1.35 + k * 0.32, -0.75));
       for (let i = 0; i < 6; i++) { const st = cyl(0.04, 0.032, 0.2, std([0xf0ece2, 0xc8231e, 0xe7b52c][(i + k) % 3], { rough: 0.6 }), 12); st.position.set(-2.38, 1.46 + k * 0.32, -1.1 + i * 0.14); S.add(st); }
@@ -307,7 +318,7 @@ export default {
     // a customer queued at register 2 (out of focus)
     const q = new Person({ h: 1.7, skin: 'tan', top: 0x3a3d42, bottom: 0x24262b, hair: 'short', build: 1.1 }); q.pose('standRelaxed', true); q.root.position.set(0.9, 0, 0.75); q.root.rotation.y = PI; S.add(q.root); this.people.push(q);
     // storefront glass: grey afternoon, light rain
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xb7c2c8).multiplyScalar(1.15) }));
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xb7c2c8).multiplyScalar(0.5) }));
     glass.position.set(0.4, 1.4, 7.6); glass.rotation.y = PI; S.add(glass);
     for (let i = 0; i < 6; i++) S.add(at(box(0.08, 2.8, 0.08, std(0x2a2c2e, { metal: 0.6, rough: 0.4 })), -3.2 + i * 1.45, 1.4, 7.55));
     S.add(at(box(8, 0.25, 0.1, std(0x2a2c2e, { metal: 0.6, rough: 0.4 })), 0.4, 2.75, 7.55));
@@ -423,12 +434,16 @@ export default {
     mark.look(weng.head, 0.6);
     // Joy turns to you
     joy.look(you, 1); joy.root.rotation.y = 1.3; weng.look(you, 0.6);
-    E.dof({ target: joy.head, aperture: 0.0025 });
-    await cam([0.42, 1.6, -1.28], [-0.95, 1.42, -1.0], 1.0, 36);
+    // the question lands on the money, not on a face
+    const dw = this.drawer.getWorldPosition(new THREE.Vector3());
+    E.dof({ target: this.drawer, aperture: 0.007 });
+    animate(k => { joy.shade(1 - 0.8 * k); weng.shade(1 - 0.8 * k); }, 1.2);
+    await cam([dw.x + 0.55, dw.y + 0.5, dw.z - 0.35], dw.toArray(), 1.4, 22);
     await D.say("Ma'am Joy", 'May alam ka ba dito?', { hold: 2.2 });
 
     let pick = await D.choose(['Magsalita|Sabihin ang refund', 'Manahimik|Yumuko sa tray'], { timer: 8, id: 'kaha', def: 1 });
     if (forceSilent) pick = 1; if (forceSpeak) pick = 0;
+    animate(k => { joy.shade(0.2 + 0.8 * k); weng.shade(0.2 + 0.8 * k); }, 1.0);
     S.kaha = pick === 0;
 
     if (S.kaha) {

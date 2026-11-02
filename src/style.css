@@ -85,12 +85,15 @@ body.nobars .bar.bottom { transform: translateY(100%); }
 #choice.single .opt.l { align-items: center; text-align: center; margin-top: 0; }
 @media (max-width: 760px) { #choice .opt { width: 34vw; } #choice .opt .lab { font-size: 18px; } }
 
-/* ask (multiple questions, Part Three) */
-#ask { position: absolute; left: 50%; bottom: calc(var(--bar) + 4vh); transform: translateX(-50%); z-index: 8; display: flex; flex-direction: column; gap: 10px; align-items: center; opacity: 0; transition: opacity .5s; }
+/* ask (Part Three questions): same serif small caps as the choice dial */
+#ask { position: absolute; left: 50%; bottom: calc(var(--bar) + 2vh); transform: translateX(-50%); z-index: 8; display: flex; flex-direction: column; gap: 6px; align-items: center; opacity: 0; transition: opacity .5s; padding: 26px 70px 22px; background: radial-gradient(ellipse at center, rgba(0,0,0,.72) 0%, rgba(0,0,0,.5) 45%, rgba(0,0,0,0) 72%); }
 #ask.on { opacity: 1; }
-#ask button { pointer-events: auto; font-size: 20px; padding: 12px 28px; background: rgba(10,12,14,.66); border: 1px solid rgba(255,255,255,.14) !important; transition: all .25s; min-width: 420px; }
-#ask button:hover { background: rgba(255,255,255,.92); color: #000; }
-#ask button.done { opacity: .3; pointer-events: none; }
+#ask::before { content: 'Magtanong'; font-family: var(--serif); font-size: 15px; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.6); margin-bottom: 6px; text-shadow: 0 1px 10px #000; }
+#ask button { pointer-events: auto; position: relative; font-family: var(--serif); font-size: 25px; letter-spacing: .02em; padding: 6px 30px; color: rgba(255,255,255,.88); background: none; border: 0; text-shadow: 0 1px 3px #000, 0 2px 16px #000; transition: color .25s, transform .25s; }
+#ask button::before { content: ''; position: absolute; left: 6px; top: 50%; width: 9px; height: 9px; margin-top: -4px; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; transition: all .25s; }
+#ask button:hover { color: #fff; transform: scale(1.04); }
+#ask button:hover::before { background: #fff; box-shadow: 0 0 12px rgba(255,255,255,.7); }
+#ask button.done { opacity: .28; pointer-events: none; }
 
 /* patak marker */
 #patak { position: absolute; left: 4.2vw; top: calc(var(--bar) + 3.4vh); z-index: 8; display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .6s; }
