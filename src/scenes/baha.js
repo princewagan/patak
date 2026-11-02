@@ -19,7 +19,7 @@ const STOPS = {
 };
 
 export default {
-  grade: { lift: [0.0, 0.016, 0.024], gain: [0.8, 0.97, 1.08], sat: 1.2, grain: 0.06, bloom: 0.22, bloomThreshold: 0.9, exposure: 0.58, vignette: 1.15, black: 0.04, gamma: 1.2, curve: 0.5 },
+  grade: { lift: [0.0, 0.016, 0.024], gain: [0.8, 0.97, 1.08], sat: 1.2, grain: 0.06, bloom: 0.22, bloomThreshold: 0.9, exposure: 0.46, vignette: 1.15, black: 0.045, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();

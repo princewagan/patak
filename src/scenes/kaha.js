@@ -43,23 +43,23 @@ function menuTex(title, items, accent) {
 
 export default {
   dof: { focus: 1.4, aperture: 0.0028, maxblur: 0.007 },
-  grade: { lift: [0.0, 0.008, 0.004], gain: [0.84, 1.02, 0.88], sat: 1.05, grain: 0.075, bloom: 0.34, bloomThreshold: 0.86, exposure: 0.62, vignette: 1.15, ca: 0.0016, black: 0.035, gamma: 1.2, curve: 0.5 },
+  grade: { lift: [0.0, 0.008, 0.004], gain: [0.84, 1.02, 0.88], sat: 1.0, grain: 0.075, bloom: 0.38, bloomThreshold: 0.84, exposure: 0.62, vignette: 1.15, ca: 0.0016, black: 0.035, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     RectAreaLightUniformsLib.init();
     const S = this.scene = new THREE.Scene();
-    S.background = new THREE.Color(0x2b302d);
-    S.fog = new THREE.Fog(0x3a3f3b, 6, 16);
+    S.background = new THREE.Color(0x121513);
+    S.fog = new THREE.Fog(0x161a18, 5, 14);
     S.environment = await envFrom(engine.renderer, '/tex/kloofendal_overcast_puresky_1k.hdr');
-    S.environmentIntensity = 0.28;
+    S.environmentIntensity = 0.09;
 
     /* ---------- light: fluorescent panels, slightly green ---------- */
-    S.add(new THREE.HemisphereLight(0xd6e6dc, 0x2a2622, 0.45));
+    S.add(new THREE.HemisphereLight(0xd6e6dc, 0x2a2622, 0.12));
     const FL = 0xe9fff1;
     const panels = [[-1.2, -1.2], [1.0, -1.2], [-1.2, 2.2], [1.6, 2.2], [-1.2, 5], [1.6, 5]];
     this.rects = [];
     for (const [x, z] of panels) {
-      const r = new THREE.RectAreaLight(FL, z < 0 ? 15 : 11, 1.2, 0.3); r.position.set(x, 2.98, z); r.lookAt(x, 0, z); S.add(r); this.rects.push(r);
+      const r = new THREE.RectAreaLight(FL, z < 0 ? 8 : 4, 1.2, 0.3); r.position.set(x, 2.98, z); r.lookAt(x, 0, z); S.add(r); this.rects.push(r);
       const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), glow(FL, 2.2)); p.rotation.x = PI / 2; p.position.set(x, 2.985, z); S.add(p);
     }
     const key = new THREE.SpotLight(0xf2fff4, 9, 7, 0.8, 0.85, 1.6); key.position.set(-0.6, 2.9, -1.4); key.target.position.set(-1.1, 0.9, -1.1);
@@ -311,7 +311,7 @@ export default {
     glass.position.set(0.4, 1.4, 7.6); glass.rotation.y = PI; S.add(glass);
     for (let i = 0; i < 6; i++) S.add(at(box(0.08, 2.8, 0.08, std(0x2a2c2e, { metal: 0.6, rough: 0.4 })), -3.2 + i * 1.45, 1.4, 7.55));
     S.add(at(box(8, 0.25, 0.1, std(0x2a2c2e, { metal: 0.6, rough: 0.4 })), 0.4, 2.75, 7.55));
-    const day = new THREE.DirectionalLight(0xc0ccd6, 0.6); day.position.set(0, 3, 12); day.target.position.set(0, 0, 0); S.add(day, day.target);
+    const day = new THREE.DirectionalLight(0xc0ccd6, 0.32); day.position.set(0, 3, 12); day.target.position.set(0, 0, 0); S.add(day, day.target);
 
     /* ---------- crew ---------- */
     const crewTop = 0x8f1d1b, crewCap = 0x7d1714;
@@ -365,7 +365,7 @@ export default {
   update(dt, t) {
     for (const p of this.people) p.update(dt, t);
     // flicker one tube now and then
-    const f = Math.random() < 0.008 ? 0.35 : 1; this.rects[1].intensity = 15 * f;
+    const f = Math.random() < 0.008 ? 0.35 : 1; this.rects[1].intensity = 8 * f;
     if (this.phone.visible) { this.phoneLight.position.copy(this.phone.position).add(new THREE.Vector3(0, 0.05, 0.08).applyQuaternion(this.phone.quaternion)); }
   },
 

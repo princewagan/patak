@@ -12,7 +12,7 @@ import { glassPass } from '../engine/glass.js';
 const PI = Math.PI;
 
 export default {
-  grade: { lift: [0.0, 0.016, 0.026], gain: [0.82, 0.98, 1.1], sat: 1.2, grain: 0.065, bloom: 0.3, bloomThreshold: 0.85, exposure: 0.5, vignette: 1.15, black: 0.04, gamma: 1.2, curve: 0.5 },
+  grade: { lift: [0.0, 0.016, 0.026], gain: [0.82, 0.98, 1.1], sat: 1.2, grain: 0.065, bloom: 0.3, bloomThreshold: 0.85, exposure: 0.42, vignette: 1.15, black: 0.045, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();

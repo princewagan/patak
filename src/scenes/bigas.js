@@ -92,7 +92,7 @@ function coinMesh(r = 0.012, color = 0xc9b27a) {
 
 export default {
   dof: { focus: 1.05, aperture: 0.004, maxblur: 0.008 },
-  grade: { lift: [0.004, 0.002, 0.0], gain: [1.08, 0.95, 0.78], sat: 1.15, grain: 0.08, bloom: 0.4, bloomThreshold: 0.8, exposure: 0.66, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
+  grade: { lift: [0.006, 0.004, 0.002], gain: [1.04, 0.97, 0.86], sat: 0.48, grain: 0.08, bloom: 0.36, bloomThreshold: 0.82, exposure: 0.9, vignette: 1.15, black: 0.035, gamma: 1.18, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();

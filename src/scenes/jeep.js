@@ -274,14 +274,14 @@ export default {
     boy.look(new THREE.Vector3(0.7, 1.1, 1.3), 1); boy.expression({ worry: 0.6 });
     // stage it: interior goes dark, he is rimmed by the light from the street behind him
     this.tubeL.forEach(l => (l.userData.dim = 0.12));
-    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * k; this.hemi.intensity = 0.35 * (1 - k * 0.9); this.sky.intensity = 0.55 * (1 - k * 0.85); this.scene.environmentIntensity = 0.18 * (1 - k * 0.85); this.engine.renderer.toneMappingExposure = e0 * (1 - 0.35 * k); this.follow.position.z = 12.5 - 6 * k; }, 1.8);
+    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * k; this.hemi.intensity = 0.35 * (1 - k * 0.9); this.sky.intensity = 0.55 * (1 - k * 0.85); this.scene.environmentIntensity = 0.18 * (1 - k * 0.85); this.engine.renderer.toneMappingExposure = e0 * (1 - 0.22 * k); this.follow.position.z = 12.5 - 6 * k; }, 1.8);
     this.cam([0.66, 1.1, 1.28], [0.02, 0.98, 1.95], 1.6, 40);
     await D.wait(1.0);
   },
   async hopOff(D) {
     const boy = this.boy;
     this.tubeL.forEach(l => (l.userData.dim = 1));
-    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * (1 - k); this.hemi.intensity = 0.035 + 0.315 * k; this.sky.intensity = 0.08 + 0.47 * k; this.scene.environmentIntensity = 0.027 + 0.153 * k; this.engine.renderer.toneMappingExposure = e0 * (0.65 + 0.35 * k); this.follow.position.z = 6.5 + 6 * k; }, 2);
+    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * (1 - k); this.hemi.intensity = 0.035 + 0.315 * k; this.sky.intensity = 0.08 + 0.47 * k; this.scene.environmentIntensity = 0.027 + 0.153 * k; this.engine.renderer.toneMappingExposure = e0 * (0.78 + 0.22 * k); this.follow.position.z = 6.5 + 6 * k; }, 2);
     this.targetSpeed = 0; audio.engine(1, 0.3);
     boy.pose('stand'); boy.look(null); boy.expression({});
     this.cam([0.62, 1.13, 1.32], [-0.1, 0.6, 2.8], 2.2, 48);
