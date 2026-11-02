@@ -30,7 +30,7 @@ export class Director {
 
   // ---------- timing ----------
   wait(s) { return sleep(this.fast ? s * 0.15 : s); }
-  readTime(text) { return Math.min(7.5, Math.max(2.4, 1.3 + text.length * 0.058)); }
+  readTime(text) { return Math.min(6.2, Math.max(2.0, 1.0 + text.length * 0.05)); }
 
   // ---------- fades / bars ----------
   async black(on, s = 1.2) {
@@ -111,43 +111,46 @@ export class Director {
    * choose(['A','B'], { timer: 10, prompt, slowmo: true, def: 1 }) → index.
    * On timeout returns def (default 1) and sets this.lastTimedOut.
    */
-  choose(opts, { timer = 0, prompt = '', slowmo = true, def = 1, id } = {}) {
+  choose(opts, { timer = 0, slowmo = true, def = 1, id, defLabel = 'Walang gagawin' } = {}) {
     return new Promise(res => {
-      const el = $('#choice'), [l, r] = el.querySelectorAll('.opt'), bar = el.querySelector('.timer i');
-      el.querySelector('.prompt').textContent = prompt;
+      const el = $('#choice'), [l, r] = el.querySelectorAll('.opt'), ring = el.querySelector('.ring'), needle = el.querySelector('.needle');
+      const parse = o => { const [a, b] = String(o).split('|'); return b != null ? [a, b] : ['', a]; };
       const single = opts.length === 1;
-      l.querySelector('.lbl').textContent = opts[0];
-      r.querySelector('.lbl').textContent = single ? '' : opts[1];
-      r.style.display = single ? 'none' : ''; el.querySelector('.timer').style.display = single ? 'none' : '';
-      l.classList.toggle('single', single);
+      [[l, opts[0]], [r, opts[1] ?? '']].forEach(([b, o]) => { const [lab, ln] = parse(o); b.querySelector('.lab').textContent = lab; b.querySelector('.ln').textContent = ln; });
+      el.querySelector('.def').textContent = defLabel;
+      el.classList.toggle('single', single);
       [l, r].forEach(b => b.classList.remove('picked', 'dim', 'hl'));
       el.classList.toggle('timed', !!timer);
-      bar.style.transition = 'none'; bar.style.transform = 'scaleX(1)';
+      ring.style.transition = 'none'; ring.style.strokeDashoffset = '0';
+      needle.style.transform = 'rotate(0deg)';
+      const aim = i => { needle.style.transform = `rotate(${i === 0 ? -118 : i === 1 ? 118 : 0}deg)`; l.classList.toggle('hl', i === 0); r.classList.toggle('hl', i === 1); };
+      l.onmouseenter = () => aim(0); r.onmouseenter = () => aim(1);
+      l.onmouseleave = r.onmouseleave = () => aim(-1);
       el.classList.add('on');
       const prevScale = this.engine.timeScale;
       if (timer && slowmo) this.engine.timeScale = 0.35;
       audio.whoosh();
       let hb, to, done = false;
       if (timer) {
-        requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.transition = `transform ${timer}s linear`; bar.style.transform = 'scaleX(0)'; }));
+        requestAnimationFrame(() => requestAnimationFrame(() => { ring.style.transition = `stroke-dashoffset ${timer}s linear`; ring.style.strokeDashoffset = '326.7'; }));
         let beat = 0.95; const loop = () => { audio.heartbeat(); beat = Math.max(0.45, beat - 0.05); hb = setTimeout(loop, beat * 1000); }; loop();
         to = setTimeout(() => finish(def, true), timer * 1000);
       }
       const finish = (i, timedOut = false) => {
         if (done) return; done = true;
         clearTimeout(hb); clearTimeout(to); this.choiceKeys = null;
-        l.onclick = r.onclick = null;
+        l.onclick = r.onclick = l.onmouseenter = r.onmouseenter = null;
         this.engine.timeScale = prevScale;
         const picked = i === 0 ? l : r, other = i === 0 ? r : l;
-        if (!timedOut) { picked.classList.add('picked'); other.classList.add('dim'); audio.tone(660, .4, { vol: .06 }); }
-        else { l.classList.add('dim'); r.classList.add('dim'); }
+        if (!timedOut) { aim(i); picked.classList.add('picked'); other.classList.add('dim'); audio.tone(660, .4, { vol: .06 }); }
+        else { aim(-1); l.classList.add('dim'); r.classList.add('dim'); }
         this.lastTimedOut = timedOut;
         if (id) this.state.choices[id] = timedOut ? 'timeout' : i;
-        setTimeout(() => { el.classList.remove('on'); }, timedOut ? 300 : 650);
-        setTimeout(() => res(i), timedOut ? 500 : 1000);
+        setTimeout(() => { el.classList.remove('on'); }, timedOut ? 500 : 700);
+        setTimeout(() => res(i), timedOut ? 700 : 1050);
       };
       l.onclick = () => finish(0); r.onclick = () => finish(1);
-      this.choiceKeys = i => finish(single ? 0 : i);
+      this.choiceKeys = i => { if (single) return finish(0); aim(i); finish(i); };
       this.choiceKeys.single = single;
     });
   }

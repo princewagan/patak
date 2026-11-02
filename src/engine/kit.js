@@ -108,3 +108,35 @@ export function blob(r = 0.4, op = 0.5) {
 }
 
 export function rand(seed = 1) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+
+/** visible light beam in hazy/rainy air: an additive cone pointing down -Y from its origin (rotate it to aim) */
+export function beam(color = 0xffffff, { radius = 1, length = 3, intensity = 0.25, top = 0.05 } = {}) {
+  const g = new THREE.CylinderGeometry(top, radius, length, 32, 8, true);
+  g.translate(0, -length / 2, 0);
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uI: { value: intensity }, uLen: { value: length }, uTime: { value: 0 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: `varying vec3 vN; varying vec3 vV; varying float vY; varying vec3 vW;
+      void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - w.xyz); vY = -position.y; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uI, uLen, uTime; varying vec3 vN; varying vec3 vV; varying float vY; varying vec3 vW;
+      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9,78.2,37.7)))*43758.5); }
+      void main(){
+        float along = clamp(vY / uLen, 0.0, 1.0);
+        float edge = pow(abs(dot(normalize(vN), vV)), 1.6);
+        float fall = pow(1.0 - along, 1.7);
+        float dust = 0.85 + 0.15 * sin(vW.y * 9.0 + uTime * 0.7 + vW.x * 4.0);
+        float a = uI * edge * fall * dust;
+        gl_FragColor = vec4(uColor * a, a);
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 8; mesh.frustumCulled = false;
+  mesh.userData.tick = t => (m.uniforms.uTime.value = t);
+  return mesh;
+}
+
+/** soft additive halo for practical lights (bulbs, headlights, lamps) */
+export function halo(color = 0xffffff, size = 0.6, intensity = 1) {
+  const t = canvasTex(128, 128, (c) => { const g = c.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.15, 'rgba(255,255,255,.45)'); g.addColorStop(0.45, 'rgba(255,255,255,.08)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 128, 128); }, { srgb: false });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, color: new THREE.Color(color).multiplyScalar(intensity), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  s.scale.setScalar(size); s.renderOrder = 9; return s;
+}

@@ -19,7 +19,7 @@ const STOPS = {
 };
 
 export default {
-  grade: { lift: [0.0, 0.005, 0.01], gain: [1.0, 1.0, 1.02], sat: 0.92, grain: 0.06, bloom: 0.18, bloomThreshold: 0.95, exposure: 1.12, vignette: 1.2 },
+  grade: { lift: [0.0, 0.016, 0.024], gain: [0.8, 0.97, 1.08], sat: 1.2, grain: 0.06, bloom: 0.22, bloomThreshold: 0.9, exposure: 0.58, vignette: 1.15, black: 0.04, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -66,7 +66,6 @@ export default {
   async play(D, S) {
     await this.go(D, 'exits', { fade: 1.6 });
     await D.say('', 'Bumaba kami. Ang daming tao sa labas. Taga-roon sila.');
-    await D.say('', 'Lubog lahat ng daan palabas ng village.');
     await this.go(D, 'street57');
     await D.say('', 'Sila ang unang lumapit at kumausap sa amin.');
     await D.wait(0.4);
@@ -74,23 +73,17 @@ export default {
       if (i === 0) await D.say('', 'Madalas daw. Pero ito na raw ang pinakamalala.');
       else await D.say('', 'Mataas daw ang gitna ng village. Lahat ng labasan, pababa.');
     });
-    await this.go(D, 'street');
-    await D.say('', 'Kailangan nang mag-CR ni Keira.');
-    await D.say('', 'Pinapasok kami ng isang pamilyang hindi namin kilala.');
+    await D.say('', 'Kailangan nang mag-CR ni Keira. Pinapasok kami ng isang pamilyang hindi namin kilala.');
     await this.go(D, 'house');
     await D.say('', 'Tubig. Biskwit. Silong habang bumubuhos. Kuwentuhan.');
     await D.say('', 'May aso sila. Mga apatnapung minuto kami roon.');
     await this.go(D, 'boat');
     audio.file('flood', '/audio/flood-real.mp3', 0.9);
     await D.say('', 'Dumating ang rescue boat ng barangay sa kanto.');
-    await D.wait(1.5);
+    await D.wait(0.8);
     audio.layer('flood', 0, null, 2);
-    await this.go(D, 'walk');
-    await D.say('', 'Naglakad-lakad kami. Nakinig. Nagtanong.');
     await this.go(D, 'karinderya');
-    await D.say('', 'Kumain kami sa karinderya.');
-    await this.go(D, 'sarisari');
-    await D.say('', 'Bumili sa sari-sari store. Ang babait nila.');
+    await D.say('', 'Kumain kami sa karinderya. Bumili sa sari-sari store. Ang babait nila.');
     await D.black(true, 1.4);
     audio.rain(0.4, 0.6);
     await D.say('', 'Nung humupa ang tubig, nakauwi na rin kami.');

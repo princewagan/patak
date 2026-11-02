@@ -15,7 +15,8 @@ const FinalShader = {
     uCA: { value: 0.0018 },
     uLift: { value: new THREE.Vector3(0.0, 0.0, 0.0) },
     uGain: { value: new THREE.Vector3(1, 1, 1) },
-    uSat: { value: 0.85 },
+    uSat: { value: 1.05 },
+    uBlack: { value: 0.03 }, uGamma: { value: 1.18 }, uCurve: { value: 0.45 },
     uFade: { value: 0 },
     uRes: { value: new THREE.Vector2(1, 1) },
   },
@@ -23,7 +24,7 @@ const FinalShader = {
     varying vec2 vUv;
     void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uTime, uGrain, uVignette, uCA, uSat, uFade;
+    uniform sampler2D tDiffuse; uniform float uTime, uGrain, uVignette, uCA, uSat, uFade, uBlack, uGamma, uCurve;
     uniform vec3 uLift, uGain; uniform vec2 uRes;
     varying vec2 vUv;
     float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -35,13 +36,16 @@ const FinalShader = {
       col.r = texture2D(tDiffuse, vUv + off).r;
       col.g = texture2D(tDiffuse, vUv).g;
       col.b = texture2D(tDiffuse, vUv - off).b;
-      // grade (display space)
+      // grade (display space): black crush, gamma, filmic S-curve, saturation, tint
+      col = max(col - uBlack, 0.0) / (1.0 - uBlack);
+      col = pow(col, vec3(uGamma));
+      col = mix(col, col*col*(3.0 - 2.0*col), uCurve);
       float l = dot(col, vec3(0.2126,0.7152,0.0722));
-      col = mix(vec3(l), col, uSat);
+      col = max(mix(vec3(l), col, uSat), 0.0);
       col = col * uGain + uLift * (1.0 - col);
       // vignette
-      float vig = (1.0 - smoothstep(0.18, 0.85, r2 * 1.9 * uVignette));
-      col *= mix(1.0, vig, 0.85);
+      float vig = (1.0 - smoothstep(0.2, 0.95, r2 * 1.8 * uVignette));
+      col *= mix(1.0, vig, 0.72);
       // grain
       float g = hash(vUv*uRes + fract(uTime*7.31)*100.0) - 0.5;
       col += g * uGrain * (0.6 + 0.4*(1.0-l));
@@ -106,6 +110,7 @@ export class Engine {
     if (g.grain != null) u.uGrain.value = g.grain;
     if (g.vignette != null) u.uVignette.value = g.vignette;
     if (g.ca != null) u.uCA.value = g.ca;
+    u.uBlack.value = g.black ?? 0.03; u.uGamma.value = g.gamma ?? 1.18; u.uCurve.value = g.curve ?? 0.45;
     if (g.bloom != null) this.bloom.strength = g.bloom;
     if (g.bloomThreshold != null) this.bloom.threshold = g.bloomThreshold;
     if (g.exposure != null) this.renderer.toneMappingExposure = g.exposure;
@@ -141,14 +146,27 @@ export class Engine {
 
   onUpdate(fn) { this.updaters.add(fn); return () => this.updaters.delete(fn); }
 
+  /** drop render resolution if the machine can't keep up (checked every 2 s) */
+  adapt(raw) {
+    this._ft = (this._ft || 0) + raw; this._fn = (this._fn || 0) + 1;
+    if (this._ft < 2) return;
+    const avg = this._ft / this._fn; this._ft = 0; this._fn = 0;
+    const pr = this.renderer.getPixelRatio();
+    if (avg > 0.034 && pr > 0.7) { const n = Math.max(0.7, pr - 0.2); this.renderer.setPixelRatio(n); this.composer.setPixelRatio(n); this.resize(); }
+    else if (avg > 0.05 && this.bokeh.enabled) this.lowDof = true;
+  }
+
   frame() {
-    const raw = Math.min(this.clock.getDelta(), 0.05);
+    const rawFull = this.clock.getDelta();
+    this.adapt(Math.min(rawFull, 0.25));
+    const raw = Math.min(rawFull, 0.1);
     const dt = raw * this.timeScale;
     this.time += dt;
     this.final.uniforms.uTime.value += raw;
     if (this.current && this.current.update) this.current.update(dt, this.time, raw);
     for (const fn of this.updaters) fn(dt, this.time, raw);
     this.rig.update(raw, dt);
+    if (this.lowDof) this.bokeh.enabled = false;
     if (this.bokeh.enabled) {
       if (this.focus) { const p = this.focus.isVector3 ? this.focus : this.focus.getWorldPosition(new THREE.Vector3()); this.focusT = p.distanceTo(this.camera.position); }
       const u = this.bokeh.uniforms.focus; u.value += (this.focusT - u.value) * (1 - Math.exp(-6 * raw));

@@ -30,7 +30,7 @@ function billTex(v) {
 
 function sheetTex() {
   return canvasTex(512, 512, (c, w, h) => {
-    c.fillStyle = '#6f7f95'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#4a5466'; c.fillRect(0, 0, w, h);
     for (let y = 0; y < h; y += 64) for (let x = 0; x < w; x += 64) {
       const ox = (y / 64) % 2 ? 32 : 0;
       c.fillStyle = 'rgba(230,220,200,.35)'; c.beginPath(); c.arc(x + ox + 32, y + 32, 13, 0, 7); c.fill();
@@ -87,7 +87,7 @@ function glassMat() {
 
 export default {
   dof: { focus: 0.62, aperture: 0.006, maxblur: 0.009 },
-  grade: { lift: [0.012, 0.014, 0.03], gain: [0.98, 0.98, 1.04], sat: 0.82, grain: 0.09, bloom: 0.3, bloomThreshold: 0.85, exposure: 0.78, vignette: 1.3 },
+  grade: { lift: [0.0, 0.006, 0.014], gain: [0.86, 0.95, 1.1], sat: 1.05, grain: 0.085, bloom: 0.38, bloomThreshold: 0.8, exposure: 0.66, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -126,8 +126,8 @@ export default {
     const sodium = new THREE.PointLight(0xff9440, 7, 9, 1.5); sodium.position.set(1.9, 3.0, -2.6); S.add(sodium);
     this.flash = new THREE.PointLight(0xcfe0ff, 0, 12, 1.2); this.flash.position.set(-1.0, 3.2, -3.0); S.add(this.flash);
     // light spilling in through the louvers onto the floor/mattress
-    const spill = new THREE.SpotLight(0xff9a50, 2.2, 6, 0.55, 0.7, 1.4); spill.position.set(wc + 0.2, 2.05, -RZ - 0.6); spill.target.position.set(-0.2, 0.1, 0.2); spill.castShadow = true; spill.shadow.mapSize.set(1024, 1024); S.add(spill, spill.target);
-    S.add(new THREE.HemisphereLight(0x23314a, 0x080706, 0.22));
+    const spill = new THREE.SpotLight(0xff9a50, 6, 6, 0.6, 0.7, 1.3); spill.position.set(wc + 0.2, 2.05, -RZ - 0.6); spill.target.position.set(-0.2, 0.1, 0.2); spill.castShadow = true; spill.shadow.mapSize.set(1024, 1024); S.add(spill, spill.target);
+    S.add(new THREE.HemisphereLight(0x2c3c5a, 0x0c0a08, 0.45));
 
     // ---------- things in the room ----------
     // foam mattress on the floor with a sheet, pillow, thin blanket
@@ -135,7 +135,7 @@ export default {
     sheet.normalScale.set(0.5, 0.5);
     S.add(at(box(1.0, 0.11, 1.95, sheet, 0.04), -0.55, 0.055, 0.35));
     S.add(at(box(0.48, 0.1, 0.3, std(0xd8d2c6, { rough: 0.95 }), 0.05), -0.55, 0.15, -0.42));
-    const blanket = box(0.9, 0.035, 0.7, std(0x5e3d3d, { rough: 1 }), 0.015); blanket.position.set(-0.6, 0.125, 1.0); blanket.rotation.y = 0.08; S.add(blanket);
+    const blanket = box(0.9, 0.035, 0.7, std(0x5e3d3d, { rough: 1 }), 0.015); blanket.position.set(-0.62, 0.125, 1.42); blanket.rotation.y = 0.08; S.add(blanket);
     // stand fan (oscillating head, spinning blades)
     const fan = new THREE.Group(); fan.position.set(0.95, 0, 0.55); S.add(fan);
     const fanM = std(0xe6e3dc, { rough: 0.45 });
@@ -165,7 +165,7 @@ export default {
     // the phone and the money on the sheet
     const phone = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.009, 0.15), [std(0x111), std(0x111), new THREE.MeshBasicMaterial({ map: phoneScreen() }), std(0x111), std(0x111), std(0x111)]);
     phone.position.set(-0.3, 0.115, 0.42); phone.rotation.y = 0.35; S.add(phone);
-    const pl = new THREE.PointLight(0xb6c8ff, 0.35, 1.1, 2); pl.position.set(-0.3, 0.3, 0.42); S.add(pl);
+    const pl = new THREE.PointLight(0xb6c8ff, 0.12, 0.9, 2); pl.position.set(-0.3, 0.3, 0.42); S.add(pl);
     this.money = new THREE.Group(); S.add(this.money);
 
     // ---------- weather outside ----------
@@ -221,7 +221,7 @@ export default {
     await D.say('', `Binilang mo ang natira. ₱${amount}.`);
     // the rain gets heavy; look up at the window
     E.dof({ focus: 2.6, aperture: 0.004 });
-    rig.move({ pos: [-0.42, 1.08, 1.1], look: [0.6, 1.4, -1.6], dur: 3.2, fov: 42 });
+    rig.move({ pos: [-0.5, 1.1, 1.2], look: [0.62, 1.25, -1.1], dur: 3.2, fov: 52 });
     audio.rain(1, 0.4); audio.roof(1.0);
     await animate(k => { for (const g of this.glass) g.userData.u.uAmt.value = 0.6 + k * 0.35; this.rain.uniforms.uSpeed.value = 10 + k * 4; }, 2.0);
     this.flash.intensity = 14; setTimeout(() => audio.thunder(), 900);

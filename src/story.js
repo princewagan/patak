@@ -81,7 +81,7 @@ function chapters(engine, D, S) {
       await D.say('', "Alam mo kung saan napunta. Kanina, si Ma'am Joy mismo ang nag-approve ng ₱500 na refund sa kahang 'yon. Hindi niya ni-log.");
       await D.say('Mark', "Pre, 'wag ka nang makialam. Renewal mo next week.");
       await D.say("Ma'am Joy", 'May alam ka ba dito?');
-      const p = await D.choose(['Sabihin ang refund', 'Manahimik'], { timer: 8, id: 'kaha', def: 1 });
+      const p = await D.choose(['Magsalita|Sabihin ang refund', 'Manahimik|Yumuko sa tray'], { timer: 8, id: 'kaha', def: 1 });
       S.kaha = p === 0;
       if (S.kaha) {
         await D.say('Ikaw', "Ma'am, 'yung refund po kanina… kayo po 'yung nag-approve.");
@@ -109,7 +109,7 @@ function chapters(engine, D, S) {
       await D.say('Tindera', "Pasensya na po, 'La. Puno na po 'yung lista n'yo.");
       await D.say('Lola Ising', 'May tatlo kasi akong apo sa bahay…');
       await D.say('', `₱${S.wallet} na lang ang pera mo. Tatlong araw pa bago sumahod.`);
-      const p = await D.choose(['Dagdagan ang kulang', "Bayaran lang ang sa'yo"], { id: 'bigas' });
+      const p = await D.choose(['Dagdagan|Ikaw na ang magbayad ng kulang', "Umiwas|Bayaran lang ang sa'yo"], { id: 'bigas' });
       S.bigas = p === 0;
       if (S.bigas) {
         S.wallet -= 20;
@@ -185,7 +185,7 @@ function chapters(engine, D, S) {
       await D.card('', 'Huwebes', '6:40 AM', { sting: false, hold: 2 });
       let p;
       if (has('jeep')) { await show('jeep'); p = await SCENES.jeep.again(D, S); }
-      else { await D.say('', 'Parehong jeep. Parehong kanto. Sumakay ulit ang bata. May sobre ulit sa kandungan mo.'); p = await D.choose(['Lagyan ng bente', 'Ibalik nang walang laman'], { timer: 10, id: 'ulit', def: 1 }); await D.black(true, 1.5); }
+      else { await D.say('', 'Parehong jeep. Parehong kanto. Sumakay ulit ang bata. May sobre ulit sa kandungan mo.'); p = await D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10, id: 'ulit', def: 1 }); await D.black(true, 1.5); }
       audio.stopAll(2);
       await D.wait(1.2);
       await D.lines([{ t: p === 0 ? 'Sa tingin mo, hanggang saan aabot ang bente mo?' : 'Bukas, may sobre ulit.', hold: 5.5 }]);

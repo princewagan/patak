@@ -67,14 +67,14 @@ export class Person {
     const chest = this.chest = new THREE.Group(); chest.position.y = 0.3 * s; spine.add(chest);
 
     // neck + head
-    const neck = this.neck = new THREE.Group(); neck.position.y = 0.035 * s; chest.add(neck);
-    const neckM = mesh(new THREE.CylinderGeometry(0.042 * s, 0.05 * s, 0.09 * s, 12), skin); neckM.position.y = 0.035 * s; neck.add(neckM);
-    const head = this.head = new THREE.Group(); head.position.y = 0.085 * s; neck.add(head);
+    const neck = this.neck = new THREE.Group(); neck.position.y = 0.03 * s; chest.add(neck);
+    const neckM = mesh(new THREE.CylinderGeometry(0.05 * s, 0.058 * s, 0.07 * s, 12), skin); neckM.position.y = 0.025 * s; neck.add(neckM);
+    const head = this.head = new THREE.Group(); head.position.y = 0.062 * s; neck.add(head);
     const hr = (kid ? 0.105 : 0.098) * s;
     this.hr = hr;
     const skull = mesh(new THREE.SphereGeometry(hr, 28, 20), skin); skull.scale.set(0.9, 1.06, 1.0); skull.position.y = hr * 0.95; head.add(skull);
-    const jaw = mesh(new THREE.SphereGeometry(hr * 0.78, 22, 14), skin); jaw.scale.set(0.95, 0.85, 0.95); jaw.position.set(0, hr * 0.55, hr * 0.12); head.add(jaw);
-    const nose = mesh(new THREE.SphereGeometry(hr * 0.17, 10, 8), skin); nose.scale.set(0.9, 0.8, 1.1); nose.position.set(0, hr * 0.82, hr * 0.92); head.add(nose);
+    const jaw = mesh(new THREE.SphereGeometry(hr * 0.8, 22, 14), skin); jaw.scale.set(0.92, 0.82, 0.9); jaw.position.set(0, hr * 0.58, hr * 0.06); head.add(jaw);
+    const nose = mesh(new THREE.SphereGeometry(hr * 0.13, 10, 8), skin); nose.scale.set(1.0, 0.85, 0.9); nose.position.set(0, hr * 0.8, hr * 0.9); head.add(nose);
     for (const sx of [-1, 1]) {
       const ear = mesh(new THREE.SphereGeometry(hr * 0.2, 10, 8), skin); ear.scale.set(0.45, 1, 0.7); ear.position.set(sx * hr * 0.9, hr * 0.95, 0); head.add(ear);
     }
@@ -104,7 +104,7 @@ export class Person {
       if (style === 'long') {
         const fall = mesh(new THREE.CapsuleGeometry(hr * 0.8, hr * 1.6, 6, 14), hairM); fall.scale.set(1.05, 1, 0.42); fall.position.set(0, hr * 0.05, -hr * 0.55); this.hair.add(fall);
       }
-      if (style === 'bun') { const bun = mesh(new THREE.SphereGeometry(hr * 0.38, 14, 10), hairM); bun.position.set(0, hr * 1.25, -hr * 0.95); this.hair.add(bun); }
+      if (style === 'bun' && !o.cap) { const bun = mesh(new THREE.SphereGeometry(hr * 0.38, 14, 10), hairM); bun.position.set(0, hr * 1.25, -hr * 0.95); this.hair.add(bun); }
       if (style === 'messy' || style === 'short') {
         // fringe
         const fr = mesh(new THREE.SphereGeometry(hr * 1.02, 18, 8, Math.PI * 0.2, Math.PI * 0.6, Math.PI * 0.18, Math.PI * 0.16), hairM);

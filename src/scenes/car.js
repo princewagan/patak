@@ -12,7 +12,7 @@ import { glassPass } from '../engine/glass.js';
 const PI = Math.PI;
 
 export default {
-  grade: { lift: [0.01, 0.015, 0.02], gain: [0.97, 1.0, 1.04], sat: 0.85, grain: 0.07, bloom: 0.22, bloomThreshold: 0.92, exposure: 0.88, vignette: 1.3 },
+  grade: { lift: [0.0, 0.016, 0.026], gain: [0.82, 0.98, 1.1], sat: 1.2, grain: 0.065, bloom: 0.3, bloomThreshold: 0.85, exposure: 0.5, vignette: 1.15, black: 0.04, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -134,7 +134,7 @@ export default {
     await D.say('', 'Nag-park kami. Naka-on ang makina.');
     await cam([-0.3, -0.12, -2], 3, 38);
     await D.wait(1.6);
-    const pick = await D.choose(['Maghintay na lang sa kotse', 'Bumaba'], { id: 'baba' });
+    const pick = await D.choose(['Maghintay|Dito na lang sa kotse', 'Bumaba|Lumabas sa ulan'], { id: 'baba' });
     if (pick === 0) {
       await cam([-0.12, -0.04, -2], 2.2, 42);
       await D.say('', 'Naghintay kami. Hindi tumitigil ang ulan.');

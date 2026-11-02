@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { pbr, std, glow, box, cyl, at, sign, canvasTex, envFrom, blob } from '../engine/kit.js';
+import { pbr, std, glow, box, cyl, at, sign, canvasTex, envFrom, blob, beam, halo } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
@@ -26,7 +26,7 @@ function envelope(text, big = false) {
 
 export default {
   dof: { focus: 1.2, aperture: 0.0035, maxblur: 0.007 },
-  grade: { lift: [0.015, 0.022, 0.035], gain: [0.94, 1.0, 1.08], sat: 0.8, grain: 0.08, bloom: 0.32, bloomThreshold: 0.88, exposure: 0.72, vignette: 1.2 },
+  grade: { lift: [0.0, 0.016, 0.026], gain: [0.8, 0.98, 1.1], sat: 1.1, grain: 0.07, bloom: 0.42, bloomThreshold: 0.82, exposure: 0.5, vignette: 1.2, black: 0.035, gamma: 1.22, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -36,8 +36,8 @@ export default {
     S.environmentIntensity = 0.18;
 
     // ---------- light ----------
-    S.add(new THREE.HemisphereLight(0x8ea2b8, 0x1a1816, 0.35));
-    const sky = new THREE.DirectionalLight(0x9db0c8, 0.55); sky.position.set(-6, 10, 2); S.add(sky);
+    this.hemi = new THREE.HemisphereLight(0x8ea2b8, 0x1a1816, 0.35); S.add(this.hemi);
+    const sky = this.sky = new THREE.DirectionalLight(0x9db0c8, 0.55); sky.position.set(-6, 10, 2); S.add(sky);
     const tubeL = []; for (const z of [-0.9, 0.9]) { const l = new THREE.PointLight(0xdcebff, 1.1, 3.4, 2); l.position.set(0, 1.36, z); S.add(l); tubeL.push(l); }
     tubeL[1].castShadow = true; tubeL[1].shadow.mapSize.set(1024, 1024); tubeL[1].shadow.bias = -0.002; tubeL[1].shadow.radius = 4;
     this.tubeL = tubeL;
@@ -74,6 +74,9 @@ export default {
     J.add(at(box(2 * W + 0.1, 0.05, 4.4, ceil), 0, CEIL + 0.02, 0));
     // fluorescent tube
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.4, 10), glow(0xe8f2ff, 4)); tube.rotation.x = PI / 2; tube.position.set(0, CEIL - 0.03, 0); J.add(tube); this.tube = tube;
+    this.beams = [];
+    const tb = beam(0xbfd4ff, { radius: 0.75, length: 1.4, intensity: 0.05, top: 0.12 }); tb.position.set(0, CEIL - 0.04, 0); tb.scale.z = 2.2; J.add(tb); this.beams.push(tb);
+    const th = halo(0xdcebff, 0.5, 0.6); th.position.set(0, CEIL - 0.05, 0.3); J.add(th);
     // rear opening: side panels + header + step + grab pole
     for (const sx of [-1, 1]) J.add(at(box(0.44, CEIL, 0.04, paint), sx * 0.67, CEIL / 2, 2.17));
     J.add(at(box(2 * W, 0.22, 0.04, paint), 0, CEIL - 0.1, 2.17));
@@ -148,12 +151,12 @@ export default {
     for (const p of [this.l1, this.l2, this.l3, this.l4, this.l5, this.ale, this.r3, this.r4, this.r5]) {
       const e = envelope(false); e.rotation.x = -PI / 2; e.position.set(0, 0.5, 0.25); e.visible = false; p.root.add(e); this.laps.push(e);
     }
-    this.myEnv = envelope(true); this.myEnv.rotation.set(-PI / 2 + 0.35, 0, 0); this.myEnv.position.set(0, 0.52, 0.27); this.myEnv.visible = false; you.root.add(this.myEnv);
+    this.myEnv = envelope(true); this.myEnv.rotation.set(-PI / 2 + 0.35, 0, PI); this.myEnv.position.set(0, 0.52, 0.27); this.myEnv.visible = false; you.root.add(this.myEnv);
     this.coin = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.003, 20), new THREE.MeshStandardMaterial({ color: 0xd8c27a, metalness: 1, roughness: 0.3 }));
     this.coin.visible = false; this.held.add(this.coin); this.coin.position.set(0.02, -0.16, -0.3); this.coin.rotation.set(1.2, 0, 0.3);
 
     // ---------- the boy ----------
-    const boy = this.boy = new Person({ h: 1.24, skin: 'brown', top: 0xb9b19c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
+    const boy = this.boy = new Person({ h: 1.24, skin: 'brown', top: 0x7d786c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
     boy.root.position.set(0.1, -0.8, 4.2); J.add(boy.root); this.people.push(boy);
     const rag = box(0.12, 0.02, 0.09, std(0x6d6a63, { rough: 1 })); rag.position.set(0, -0.09, 0.02); boy.arm.R.wr.add(rag);
     const stack = box(0.1, 0.03, 0.16, std(0xe8e2d2, { rough: 0.9 })); stack.position.set(0, -0.08, 0.03); stack.rotation.x = -0.3; boy.arm.L.wr.add(stack); this.stack = stack;
@@ -167,8 +170,10 @@ export default {
     const follow = new THREE.Group(); // tricycle behind us, headlight glaring in
     const hl = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), glow(0xfff2d8, 6)); hl.position.y = 0.2; follow.add(hl);
     const hlL = new THREE.PointLight(0xfff0d8, 1.4, 9, 2); hlL.position.set(0, 0.2, -0.3); follow.add(hlL);
+    for (const x of [-0.45, 0.45]) { const hb = beam(0xfff1dc, { radius: 1.1, length: 9, intensity: 0.09, top: 0.08 }); hb.rotation.x = -PI / 2; hb.position.set(x, 0.2, -0.1); follow.add(hb); this.beams.push(hb); const hh = halo(0xfff0d8, 1.1, 1.0); hh.position.set(x, 0.2, -0.15); follow.add(hh); }
     follow.add(at(box(1.1, 1.2, 1.8, std(0x15161a, { rough: 0.4, metal: 0.4 }), 0.12), 0, 0.15, 1.0));
     follow.position.set(0.4, -0.3, 12.5); S.add(follow); this.follow = follow;
+    this.rim = new THREE.PointLight(0xcfe0ff, 0, 2.2, 2); this.rim.position.set(0.0, 0.95, 2.25); S.add(this.rim);
     this.rain = new Rain({ count: 12000, size: [26, 14, 30], speed: 10, opacity: 0.28, wind: [0.4, 1.2] }).exclude([-W - 0.05, -0.1, -3.6], [W + 0.05, CEIL + 0.1, 2.2]);
     S.add(this.rain.mesh);
     const dripG = new THREE.BufferGeometry(); const dn = 70, dp = new Float32Array(dn * 3); this.dripSeed = [];
@@ -202,6 +207,7 @@ export default {
     // fluorescent flicker
     const fl = Math.random() < 0.012 ? 0.4 : 1; this.tubeL.forEach(l => { const d = l.userData.dim ?? 1; l.userData.k = (l.userData.k ?? 1) + (d - (l.userData.k ?? 1)) * 0.05; l.intensity = 1.1 * fl * l.userData.k; });
     this.rain.update(t, this.engine.camera);
+    this.beams.forEach(b => b.userData.tick(t));
     const dp = this.drips.geometry.attributes.position;
     for (let i = 0; i < dp.count; i++) { const k = (t * (0.9 + this.dripSeed[i]) + this.dripSeed[i] * 7) % 1; dp.setY(i, 1.3 - k * k * 1.6); dp.setZ(i, dp.getZ(i) + this.speed * dt * 0.02 * (dp.getZ(i) > 2.1 ? -200 : 1)); }
     dp.needsUpdate = true;
@@ -259,15 +265,23 @@ export default {
     }
     await walkPath(boy, [[0.0, 0, 1.25], [0.05, 0, 1.78]], 1.3);
     this.laps[0].visible = false;
+    await this.stageChoice(D);
+  },
+  async stageChoice(D) {
+    const boy = this.boy;
+    boy.root.position.set(0.05, 0, 1.78);
     boy.root.rotation.y = 2.05; boy.pose('stoop'); boy.set({ shL: [-55, 0, 6], elL: [-30, 0, 0] });
     boy.look(new THREE.Vector3(0.7, 1.1, 1.3), 1); boy.expression({ worry: 0.6 });
-    this.tubeL[1].userData.dim = 0.35;
+    // stage it: interior goes dark, he is rimmed by the light from the street behind him
+    this.tubeL.forEach(l => (l.userData.dim = 0.12));
+    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * k; this.hemi.intensity = 0.35 * (1 - k * 0.9); this.sky.intensity = 0.55 * (1 - k * 0.85); this.scene.environmentIntensity = 0.18 * (1 - k * 0.85); this.engine.renderer.toneMappingExposure = e0 * (1 - 0.35 * k); this.follow.position.z = 12.5 - 6 * k; }, 1.8);
     this.cam([0.66, 1.1, 1.28], [0.02, 0.98, 1.95], 1.6, 40);
     await D.wait(1.0);
   },
   async hopOff(D) {
     const boy = this.boy;
-    this.tubeL[1].userData.dim = 1;
+    this.tubeL.forEach(l => (l.userData.dim = 1));
+    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * (1 - k); this.hemi.intensity = 0.035 + 0.315 * k; this.sky.intensity = 0.08 + 0.47 * k; this.scene.environmentIntensity = 0.027 + 0.153 * k; this.engine.renderer.toneMappingExposure = e0 * (0.65 + 0.35 * k); this.follow.position.z = 6.5 + 6 * k; }, 2);
     this.targetSpeed = 0; audio.engine(1, 0.3);
     boy.pose('stand'); boy.look(null); boy.expression({});
     this.cam([0.62, 1.13, 1.32], [-0.1, 0.6, 2.8], 2.2, 48);
@@ -278,16 +292,17 @@ export default {
   async play(D, S, beat) {
     if (beat === 'montage') return this.montage(D, S);
     if (beat === 'again') return this.again(D, S);
+    if (beat === 'choice') { this.resetBoy(); this.myEnv.visible = true; this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 }); await D.black(false, 0.5); await this.stageChoice(D); return D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10 }); }
     const boy = this.boy;
     this.resetBoy();
-    await D.black(false, 2.2);
-    await D.wait(1.5);
+    await D.black(false, 2.0);
+    await D.wait(0.8);
     // phone buzzes: a scam text
     this.phone.visible = true; this.phoneLight.visible = true;
     this.engine.dof({ focus: 0.34, aperture: 0.006 });
     audio.tone(180, .25, { type: 'square', vol: .03 }); audio.tone(180, .25, { type: 'square', vol: .03, delay: .35 });
     await this.cam([0.66, 1.13, 1.3], [0.2, 0.85, 1.32], 1.6, 46);
-    await D.wait(1.6);
+    await D.wait(1.0);
     await D.say('', 'Text na naman.');
     this.phone.visible = false; this.phoneLight.visible = false; this.engine.dof({ focus: 1.2, aperture: 0.0035 });
     await this.cam([0.66, 1.13, 1.3], [-1, 0.98, 1.1], 2.2, 50);
@@ -320,7 +335,7 @@ export default {
     await D.say('', "₱160 ang laman ng wallet mo. Pamasahe at pagkain mo na 'yan hanggang Biyernes.");
 
     await this.collect(D);
-    const pick = await D.choose(['Lagyan ng bente', 'Ibalik nang walang laman'], { timer: 10, id: 'sobre', def: 1 });
+    const pick = await D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10, id: 'sobre', def: 1 });
     const gave = pick === 0;
     S.sobre = gave;
     if (gave) {
@@ -371,12 +386,14 @@ export default {
   /** Part Four: Thursday. Same choice, no outcome shown. Returns the pick. */
   async again(D, S) {
     this.resetBoy(); this.offset += 80;
-    this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 });
+    [1, 2, 3, 4, 5, 7, 8].forEach(i => (this.laps[i].visible = true)); this.myEnv.visible = true;
+    this.boy.root.position.set(0, 0, -1.9); this.boy.root.rotation.y = 0;
+    this.engine.dof({ focus: 0.75, aperture: 0.004 });
+    this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [0.38, 0.5, 1.29], fov: 34 });
     await D.black(false, 1.4);
-    await this.board(D);
-    await this.atYourFeet(D, false);
+    await D.wait(1.6);
     await this.collect(D);
-    const pick = await D.choose(['Lagyan ng bente', 'Ibalik nang walang laman'], { timer: 10, id: 'ulit', def: 1 });
+    const pick = await D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10, id: 'ulit', def: 1 });
     if (pick === 0) { this.coin.visible = true; await animate(k => { this.coin.position.y = -0.16 - k * 0.12; this.coin.rotation.x = 1.2 + k * 3; }, 0.9, 'in'); audio.coin(); this.coin.visible = false; this.coin.position.y = -0.16; }
     await D.black(true, 1.4);
     return pick;

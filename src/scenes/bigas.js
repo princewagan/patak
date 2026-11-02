@@ -92,7 +92,7 @@ function coinMesh(r = 0.012, color = 0xc9b27a) {
 
 export default {
   dof: { focus: 1.05, aperture: 0.004, maxblur: 0.008 },
-  grade: { lift: [0.012, 0.016, 0.03], gain: [1.02, 0.98, 0.95], sat: 0.86, grain: 0.085, bloom: 0.3, bloomThreshold: 0.86, exposure: 0.74, vignette: 1.25 },
+  grade: { lift: [0.004, 0.002, 0.0], gain: [1.08, 0.95, 0.78], sat: 1.15, grain: 0.08, bloom: 0.4, bloomThreshold: 0.8, exposure: 0.66, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -291,9 +291,9 @@ export default {
     const bill = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.045), new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide, map: canvasTex(200, 90, (c, w, h) => { c.fillStyle = '#7b6aa8'; c.fillRect(0, 0, w, h); c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.arc(150, 45, 28, 0, 7); c.fill(); c.fillStyle = '#efe9ff'; c.font = 'bold 26px Inter'; c.fillText('100', 14, 34); }) }));
     bill.rotation.x = -PI / 2 + 0.25; bill.position.set(0, 0.015, -0.01); wallet.add(bill);
     for (let i = 0; i < 4; i++) { const c = coinMesh(0.011, i % 2 ? 0xc9b27a : 0xbfc3c6); c.position.set(-0.03 + i * 0.02, 0.005, 0.025); wallet.add(c); }
-    wallet.position.set(0.03, -0.095, -0.34); wallet.rotation.set(0.95, 0.12, 0); wallet.visible = false; this.held.add(wallet);
+    wallet.position.set(0.04, -0.12, -0.48); wallet.rotation.set(0.85, 0.15, 0); wallet.visible = false; this.held.add(wallet);
     this.heldCoin = coinMesh(0.0135, 0xd6c27e); this.heldCoin.rotation.set(1.3, 0, 0.2); this.heldCoin.position.set(0.04, -0.09, -0.3); this.heldCoin.visible = false; this.held.add(this.heldCoin);
-    const coinL = new THREE.PointLight(0xffb070, 0.25, 0.8, 2); coinL.position.set(0, 0.05, -0.2); this.held.add(coinL);
+    const coinL = new THREE.PointLight(0xffb070, 0.06, 0.8, 2); coinL.position.set(0, 0.05, -0.2); this.held.add(coinL);
 
     // ---------- weather ----------
     this.rain = new Rain({ count: 9000, size: [18, 10, 18], speed: 9, opacity: 0.5, wind: [0.3, 0.6] }).exclude([-2.45, -1, -3], [2.45, 2.75, 1.36]);
@@ -386,7 +386,7 @@ export default {
 
     const devPick = new URLSearchParams(location.search).get('pick');
     if (devPick != null) setTimeout(() => document.querySelectorAll('#choice .opt')[+devPick]?.click(), 1800);
-    const p = await D.choose(['Dagdagan ang kulang', "Bayaran lang ang sa'yo"], { id: 'bigas' });
+    const p = await D.choose(['Dagdagan|Ikaw na ang magbayad ng kulang', "Umiwas|Bayaran lang ang sa'yo"], { id: 'bigas' });
     S.bigas = p === 0;
     if (S.bigas) {
       S.wallet -= 20;
@@ -449,7 +449,7 @@ export default {
       await D.wait(1.2);
       half.visible = false; // under the shawl now
       cam([0.4, 1.6, 1.9], [-4.0, 1.0, 2.4], 5, 44);
-      walkPath(lola, [[-0.8, 0, 1.75], [-3.4, 0, 2.3], [-7, 0, 2.6], [-12, 0, 2.9]], 0.45);
+      walkPath(lola, [[-0.95, 0, 1.1], [-2.4, 0, 1.9], [-5.5, 0, 2.5], [-12, 0, 2.9]], 0.45);
       await D.say('', 'Kalahating kilo ang kinuha ni Lola. Isiniksik niya sa ilalim ng balabal, tapos naglakad sa dilim.');
       D.patak('Lola Ising', 'kalahating kilo lang');
     }

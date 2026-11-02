@@ -26,9 +26,10 @@ function lumpy(geo, amt, f = 140) {
 }
 
 const GRADES = {
-  totoy: { lift: [0.012, 0.018, 0.03], gain: [1.02, 0.98, 0.94], sat: 0.86, grain: 0.075, bloom: 0.32, bloomThreshold: 0.8, exposure: 0.84, vignette: 1.25 },
-  weng: { lift: [0.02, 0.02, 0.026], gain: [1.0, 1.0, 1.02], sat: 0.82, grain: 0.06, bloom: 0.16, bloomThreshold: 0.93, exposure: 0.86, vignette: 1.1 },
-  lola: { lift: [0.012, 0.01, 0.012], gain: [1.04, 0.99, 0.9], sat: 0.86, grain: 0.075, bloom: 0.3, bloomThreshold: 0.84, exposure: 0.82, vignette: 1.32 },
+  // tender, warm against cool, but with the same crushed blacks as the rest of the game
+  totoy: { lift: [0.0, 0.006, 0.016], gain: [1.06, 0.97, 0.86], sat: 1.12, grain: 0.075, bloom: 0.4, bloomThreshold: 0.8, exposure: 0.7, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
+  weng: { lift: [0.0, 0.01, 0.018], gain: [0.94, 1.0, 1.04], sat: 1.05, grain: 0.06, bloom: 0.2, bloomThreshold: 0.9, exposure: 0.76, vignette: 1.1, black: 0.03, gamma: 1.15, curve: 0.45 },
+  lola: { lift: [0.004, 0.002, 0.0], gain: [1.08, 0.96, 0.8], sat: 1.12, grain: 0.075, bloom: 0.38, bloomThreshold: 0.8, exposure: 0.68, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
 };
 
 export default {
@@ -82,7 +83,7 @@ export default {
         const buns = new THREE.InstancedMesh(bun, crust, 40);
         const m = new THREE.Matrix4(); let i = 0;
         for (let a = 0; a < 10; a++) for (let b = 0; b < 4; b++) {
-          m.compose(new THREE.Vector3(tx * 0.72 - 0.52 + a * 0.115 + (Math.random() - .5) * 0.02, 0.07 + row * 0.24, -0.13 + b * 0.088), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random() * 3, 0)), new THREE.Vector3(0.05, 0.032, 0.038));
+          m.compose(new THREE.Vector3(tx * 0.72 - 0.52 + a * 0.115 + (Math.random() - .5) * 0.02, 0.07 + row * 0.24, -0.13 + b * 0.088), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random() * 3, 0)), new THREE.Vector3(0.038, 0.025, 0.03));
           buns.setMatrixAt(i++, m);
         }
         buns.castShadow = true; caseG.add(buns);
@@ -104,6 +105,11 @@ export default {
     const tin = pbr('corrugated_iron_02', { repeat: [3, 1], color: 0x9ea4a8, metal: 0.6, rough: 0.5 });
     const aw = box(7.4, 0.03, 2.9, tin); aw.position.set(0, 2.5, -1.05); aw.rotation.x = 0.1; G.add(aw);
     for (const x of [-3.3, 3.3]) G.add(at(cyl(0.035, 0.035, 2.4, std(0x4a4d50, { metal: 0.6, rough: 0.5 })), x, 1.2, 0.3));
+    // drips off the awning edge
+    const dn = 60, dp = new Float32Array(dn * 3); this.dripSeed = [];
+    for (let i = 0; i < dn; i++) { dp.set([-3.6 + Math.random() * 7.2, 2.36, 0.36], i * 3); this.dripSeed.push(Math.random()); }
+    const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+    this.drips = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xd8e2ea, size: 0.014, transparent: true, opacity: 0.75 })); G.add(this.drips);
     // painted board
     const board = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.4), sign('', { w: 1024, h: 372, bg: '#f2e6c4', fg: '#a8231d', font: 'bold 120px Inter, sans-serif', lines: ['MAINIT NA', 'PANDESAL'] }));
     board.position.set(-2.55, 1.85, -2.24); G.add(board);
@@ -155,18 +161,21 @@ export default {
         const tint = tints[k++ % tints.length];
         const wallM = pbr('painted_plaster_wall', { repeat: [2, 1], color: tint });
         const h = 4.5 + ((k * 37) % 3);
-        G.add(at(box(0.3, 2.2, 5.0, wallM), sx * 2.95, 1.1, z));               // front wall
-        G.add(at(box(4.0, h, 4.6, wallM), sx * 5.2, h / 2, z));                  // the house behind
+        const gz = z - 1.2;                                                     // a gate in the wall
+        const segA = (z + 2.5) - (gz + 0.8), segB = (gz - 0.8) - (z - 2.5);
+        G.add(at(box(0.3, 2.2, segA, wallM), sx * 2.95, 1.1, gz + 0.8 + segA / 2));
+        G.add(at(box(0.3, 2.2, segB, wallM), sx * 2.95, 1.1, z - 2.5 + segB / 2));
+        G.add(at(box(0.3, 0.3, 1.6, wallM), sx * 2.95, 2.05, gz));
+        G.add(at(box(4.0, h, 4.6, wallM), sx * 5.7, h / 2, z));                  // the house behind
+        G.add(at(new THREE.Mesh(new THREE.PlaneGeometry(0.9, 2.0), std(0x2a2118, { rough: 0.9 })), sx * 3.69, 1.0, gz, sx > 0 ? -PI / 2 : PI / 2)); // its door
+        const yard = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 5.0), pbr('concrete_floor_01', { repeat: [1, 3] })); yard.rotation.x = -PI / 2; yard.position.set(sx * 3.3, 0.01, z); G.add(yard);
         for (const wy of [3.1]) {                                               // upstairs window with grille
-          const w = box(0.06, 0.9, 1.3, std(0x1a1d20, { rough: 0.3 })); w.position.set(sx * 3.18, wy, z + 0.6); G.add(w);
-          for (let g = 0; g < 6; g++) G.add(at(box(0.02, 0.9, 0.015, std(0x222)), sx * 3.14, wy, z + 0.6 - 0.55 + g * 0.22));
+          const w = box(0.06, 0.9, 1.3, std(0x1a1d20, { rough: 0.3 })); w.position.set(sx * 3.68, wy, z + 0.6); G.add(w);
+          for (let g = 0; g < 6; g++) G.add(at(box(0.02, 0.9, 0.015, std(0x222)), sx * 3.64, wy, z + 0.6 - 0.55 + g * 0.22));
         }
-        // a gate in the wall
-        const gz = z - 1.2;
-        G.add(at(box(0.06, 1.9, 1.6, std(0x10140f, { rough: 0.9 })), sx * 2.97, 0.95, gz));
-        for (let b = 0; b < 12; b++) G.add(at(cyl(0.012, 0.012, 1.9, gateM, 6), sx * 2.9, 0.95, gz - 0.75 + b * 0.136));
-        G.add(at(box(0.05, 0.06, 1.6, gateM), sx * 2.9, 1.88, gz));
-        G.add(at(box(0.05, 0.06, 1.6, gateM), sx * 2.9, 0.1, gz));
+        G.add(at(box(0.04, 0.8, 1.6, gateM), sx * 2.93, 0.5, gz));              // solid lower half
+        for (let b = 0; b < 12; b++) G.add(at(cyl(0.012, 0.012, 1.0, gateM, 6), sx * 2.93, 1.4, gz - 0.75 + b * 0.136));
+        G.add(at(box(0.05, 0.06, 1.6, gateM), sx * 2.93, 1.9, gz));
         // potted plants
         if (k % 2) { G.add(at(cyl(0.16, 0.12, 0.28, std(0x8a4e2e)), sx * 2.55, 0.26, z + 1.6)); G.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), std(0x3d6b35, { rough: 1 })), sx * 2.55, 0.62, z + 1.6)); }
       }
@@ -197,7 +206,7 @@ export default {
     ill.position.set(-0.17, 0.02, 0.06); kid.spine.add(ill);
     G.add(this.kidShadow = blob(0.3, 0.35));
     // Ate Weng + the neighbor at her gate (left side, gate at z = -1.2 + ... see loop: first left gate is at z = 2.8)
-    const weng = this.weng = new Person({ h: 1.56, skin: 'tan', top: 0xb98a92, bottom: 0x2b2d33, hair: 'bun', build: 1.1 });
+    const weng = this.ateWeng = new Person({ h: 1.56, skin: 'tan', top: 0xb98a92, bottom: 0x2b2d33, hair: 'bun', build: 1.1 });
     G.add(weng.root); this.people.push(weng);
     const nb = this.neighbor = new Person({ h: 1.53, skin: 'light', top: 0x6d8fa6, bottom: 0x6d8fa6, skirt: true, hair: 'short', hairColor: 0x7d7770, build: 1.15 });
     G.add(nb.root); this.people.push(nb);
@@ -232,8 +241,8 @@ export default {
     // the bulb
     G.add(at(cyl(0.004, 0.004, 0.9, std(0x111)), 0, 2.15, 0));
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), glow(0xffd9a0, 6)); bulb.position.set(0, 1.68, 0); G.add(bulb);
-    const bl = this.bulb = new THREE.PointLight(0xffbf78, 4.2, 6, 1.7); bl.position.set(0, 1.6, 0); bl.castShadow = true; bl.shadow.mapSize.set(1024, 1024); bl.shadow.bias = -0.003; bl.shadow.radius = 3; G.add(bl);
-    G.add(new THREE.HemisphereLight(0x2b3a4f, 0x120e0a, 0.25));
+    const bl = this.bulb = new THREE.PointLight(0xffbf78, 7.5, 7, 1.6); bl.position.set(0, 1.6, 0); bl.castShadow = true; bl.shadow.mapSize.set(1024, 1024); bl.shadow.bias = -0.003; bl.shadow.radius = 3; G.add(bl);
+    G.add(new THREE.HemisphereLight(0x3a4a60, 0x1a140e, 0.45));
     // low table
     const ply = pbr('plywood', { repeat: [1, 1], color: 0xa58a68, rough: 0.7 });
     G.add(at(box(1.1, 0.04, 0.72, ply, 0.01), 0, 0.36, 0));
@@ -241,12 +250,12 @@ export default {
     // pot, pitcher, a shared bowl of ulam
     const pot = cyl(0.13, 0.11, 0.14, std(0x9da2a7, { metal: 0.8, rough: 0.35 }), 24); pot.position.set(0.0, 0.45, -0.12); G.add(pot);
     G.add(at(cyl(0.135, 0.135, 0.015, std(0xa8adb2, { metal: 0.8, rough: 0.3 }), 24), 0.18, 0.38, -0.22));
-    const pitcher = cyl(0.06, 0.07, 0.2, new THREE.MeshPhysicalMaterial({ color: 0xbfe0f2, roughness: 0.1, transparent: true, opacity: 0.45 })); pitcher.position.set(-0.35, 0.48, -0.2); G.add(pitcher);
+    const pm = new THREE.MeshPhysicalMaterial({ color: 0x6fa9cf, roughness: 0.2, transparent: true, opacity: 0.6 }); const pitcher = cyl(0.06, 0.07, 0.2, pm); pitcher.position.set(-0.35, 0.48, -0.2); G.add(pitcher); const hdl = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.01, 6, 12, PI), pm); hdl.position.set(-0.42, 0.49, -0.2); hdl.rotation.z = PI / 2; G.add(hdl);
     const bowl = cyl(0.08, 0.05, 0.05, std(0xeeeeea, { rough: 0.3 }), 20); bowl.position.set(0.16, 0.405, 0.05); G.add(bowl);
     G.add(at(cyl(0.07, 0.07, 0.005, std(0x6b3a1e, { rough: 0.4 }), 20), 0.16, 0.43, 0.05));
     // plates: three kids + Lola's place (z+ side, toward camera)
-    const plateM = new THREE.MeshStandardMaterial({ color: 0xf4f2ec, roughness: 0.22 });
-    const riceM = new THREE.MeshStandardMaterial({ color: 0xf3efe2, roughness: 0.78 });
+    const plateM = new THREE.MeshStandardMaterial({ color: 0xd9d6cf, roughness: 0.25 });
+    const riceM = new THREE.MeshStandardMaterial({ color: 0xd8d2c2, roughness: 0.8 });
     const mkPlate = (x, z, full) => {
       const g = new THREE.Group(); g.position.set(x, 0.385, z);
       g.add(cyl(0.105, 0.085, 0.014, plateM, 30));
@@ -275,7 +284,7 @@ export default {
       };
     });
     // Lola Ising
-    const lola = this.lola = new Person({ h: 1.48, skin: 'brown', top: 0x6f7f94, bottom: 0x6f7f94, skirt: true, hair: 'bun', hairColor: 0x9a948c, build: 0.95 });
+    const lola = this.lolaP = new Person({ h: 1.48, skin: 'brown', top: 0x6f7f94, bottom: 0x6f7f94, skirt: true, hair: 'bun', hairColor: 0x9a948c, build: 0.95 });
     G.add(lola.root); this.people.push(lola);
     this.stool = cyl(0.17, 0.15, 0.3, std(0x6a4e34, { rough: 0.7 }), 16); G.add(this.stool);
   },
@@ -320,6 +329,9 @@ export default {
         sp.material.opacity = on * 0.22 * Math.sin(k * PI) * (1 - k * 0.5);
       }
       this.boyShadow.position.set(this.boy.root.position.x, 0.01, this.boy.root.position.z);
+      const dp = this.drips.geometry.attributes.position;
+      for (let i = 0; i < dp.count; i++) { const k = (t * (0.7 + this.dripSeed[i] * 0.6) + this.dripSeed[i] * 9) % 1; dp.setY(i, 2.36 - k * k * 2.4); }
+      dp.needsUpdate = true;
     }
     if (this.active === 'weng') {
       for (const p of this.farKids) { p.root.position.z -= dt * 0.9; if (p.root.position.z < -25) p.root.position.z += 14; }
@@ -328,7 +340,7 @@ export default {
     if (this.active === 'lola') {
       this.blades.rotation.z += dt * 30;
       this.fanHead.rotation.y = Math.sin(t * 0.35) * 0.7 - 0.6;
-      this.bulb.intensity = 4.2 + Math.sin(t * 13) * 0.04;
+      this.bulb.intensity = 7.5 + Math.sin(t * 13) * 0.07;
     }
   },
 
@@ -375,7 +387,7 @@ export default {
     const rig = this.engine.rig, helped = !!S.kaha;
     audio.layer('rain', 0, null, 1); audio.traffic(0.15); audio.murmur(0.12); audio.layer('fan', 0);
     this.kid.root.visible = helped; this.kidShadow.visible = helped;
-    this.weng.root.visible = !helped; this.neighbor.root.visible = !helped;
+    this.ateWeng.root.visible = !helped; this.neighbor.root.visible = !helped;
     if (helped) {
       const kid = this.kid;
       kid.root.position.set(0.15, 0, 1.6); kid.root.rotation.y = PI;
@@ -383,21 +395,21 @@ export default {
       walkPath(kid, [[0.05, 0, -7.5]], 0.95).then(() => kid.set({ shR: [-6, 0, -16], elR: [-34, 0, 0] }));
       // keep the arm clamped on the board while walking
       kid.anim = (t, p) => { p.arm.R.sh.rotation.set(-0.1, 0, -0.28); p.arm.R.el.rotation.x = -0.6; };
-      rig.set({ pos: [0.9, 0.95, 3.4], look: [0.1, 0.9, -2], fov: 38 });
-      rig.move({ pos: [0.62, 0.92, -2.4], look: [0.0, 0.88, -9], fov: 34, dur: 10.5, e: 'sine' });
+      rig.set({ pos: [0.8, 1.3, 4.3], look: [0.1, 0.78, -3], fov: 36 });
+      rig.move({ pos: [0.55, 1.22, -0.9], look: [0.0, 0.72, -9], fov: 33, dur: 10.5, e: 'sine' });
       this.engine.dof({ target: this.board, aperture: 0.004, maxblur: 0.008 });
     } else {
-      const w = this.weng, nb = this.neighbor;
+      const w = this.ateWeng, nb = this.neighbor;
       // first left gate sits at x≈-2.9, z = 4 - 1.2 = 2.8
-      w.root.position.set(-2.12, 0, 2.8); w.root.rotation.y = -PI / 2;
+      w.root.position.set(-2.32, 0, 2.8); w.root.rotation.y = -PI / 2;
       w.pose('stand', true).set({ spine: [4, 0, 0], neck: [6, 0, 0], shR: [-18, 0, -6], elR: [-40, 0, 0] }, true);
-      nb.root.position.set(-3.35, 0, 2.8); nb.root.rotation.y = PI / 2;
+      nb.root.position.set(-3.32, 0, 2.8); nb.root.rotation.y = PI / 2;
       nb.pose('stand', true).set({ shR: [-20, 0, -4], elR: [-40, 0, 0] }, true);
       this.bill.visible = true;
       if (this.bill.parent !== nb.arm.R.wr) { nb.arm.R.wr.add(this.bill); this.bill.position.set(0, -0.09, 0.02); this.bill.rotation.set(0, 0, 0); }
-      rig.set({ pos: [0.2, 1.3, 1.5], look: [-2.75, 1.0, 2.75], fov: 32 });
-      rig.move({ pos: [-0.45, 1.22, 1.95], look: [-2.75, 1.05, 2.8], fov: 28, dur: 10.5, e: 'sine' });
-      this.engine.dof({ target: this.bill, aperture: 0.005, maxblur: 0.009 });
+      rig.set({ pos: [-1.2, 1.28, -0.4], look: [-2.62, 1.12, 2.8], fov: 28 });
+      rig.move({ pos: [-1.45, 1.22, 0.35], look: [-2.66, 1.1, 2.8], fov: 24, dur: 10.5, e: 'sine' });
+      this.engine.dof({ target: this.bill, aperture: 0.007, maxblur: 0.011 });
       (async () => {
         await D.wait(1.6);
         nb.set({ shR: [-70, 0, -4], elR: [-14, 0, 0] });                  // reaches through the bars
@@ -424,7 +436,7 @@ export default {
 
   async lola(D, S) {
     this.activate('lola');
-    const rig = this.engine.rig, helped = !!S.bigas, lola = this.lola;
+    const rig = this.engine.rig, helped = !!S.bigas, lola = this.lolaP;
     audio.layer('traffic', 0); audio.layer('murmur', 0); audio.rain(0.35, 0.85); audio.fan(0.7);
     this.lolaPlate.userData.rice.visible = helped;
     if (helped) {
@@ -436,8 +448,8 @@ export default {
         const ph = (t * 0.25 + 0.6) % 1, raise = Math.max(0, Math.sin(Math.min(1, Math.max(0, (ph - 0.5) / 0.4)) * PI));
         p.arm.R.sh.rotation.x = p.target.shR.x - 0.5 * raise; p.arm.R.el.rotation.x = p.target.elR.x - 0.7 * raise;
       };
-      rig.set({ pos: [0.75, 1.55, 1.9], look: [0.0, 0.38, -0.05], fov: 36 });
-      rig.move({ pos: [0.42, 1.18, 1.35], look: [0.0, 0.4, 0.0], fov: 32, dur: 11, e: 'sine' });
+      rig.set({ pos: [0.7, 1.3, 1.65], look: [0.0, 0.4, -0.05], fov: 36 });
+      rig.move({ pos: [0.42, 1.08, 1.25], look: [0.0, 0.42, 0.0], fov: 32, dur: 11, e: 'sine' });
       this.engine.dof({ target: this.plates[1], aperture: 0.004, maxblur: 0.008 });
     } else {
       // a little apart, hands in her lap, watching them eat
@@ -445,8 +457,8 @@ export default {
       lola.root.position.set(1.05, 0, 0.93); lola.root.rotation.y = Math.atan2(-1.05, -0.95);
       lola.pose('sit', true).set({ y: -0.46, spine: [8, 0, 0], neck: [10, 0, 0], shL: [-22, 0, 12], elL: [-62, -25, 0], shR: [-22, 0, -12], elR: [-62, 25, 0] }, true);
       lola.anim = null; lola.look(this.kids[1].head, 0.6);
-      rig.set({ pos: [-0.55, 1.45, 1.75], look: [0.0, 0.38, 0.1], fov: 36 });
-      rig.move({ pos: [-0.28, 1.05, 1.2], look: [0.15, 0.4, 0.3], fov: 31, dur: 11, e: 'sine' });
+      rig.set({ pos: [-0.75, 1.05, 1.35], look: [0.45, 0.5, 0.45], fov: 38 });
+      rig.move({ pos: [-0.5, 0.92, 1.12], look: [0.5, 0.52, 0.55], fov: 34, dur: 11, e: 'sine' });
       this.engine.dof({ target: this.lolaPlate, aperture: 0.0045, maxblur: 0.009 });
     }
     await D.black(false, 1.2);
