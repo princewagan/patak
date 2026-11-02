@@ -151,6 +151,9 @@ export class Director {
       };
       l.onclick = () => finish(0); r.onclick = () => finish(1);
       this.choiceKeys = i => { if (single) return finish(0); aim(i); finish(i); };
+      // test-only: ?autopick=0|1 answers every choice after 1.5 s
+      const ap = new URLSearchParams(location.search).get('autopick');
+      if (ap != null) setTimeout(() => finish(single ? 0 : Number(ap)), 1500);
       this.choiceKeys.single = single;
     });
   }
@@ -158,19 +161,20 @@ export class Director {
   /** a list of questions; returns when `need` have been asked. onAsk(i) plays the answer. */
   async ask(questions, onAsk, need = questions.length) {
     const box = $('#ask');
-    let asked = 0;
-    while (asked < need) {
+    const done = new Set();
+    while (done.size < need) {
       const i = await new Promise(res => {
         box.innerHTML = '';
         questions.forEach((q, k) => {
           const b = document.createElement('button'); b.textContent = q;
-          if (q.done) b.classList.add('done');
+          if (done.has(k)) b.classList.add('done');
           b.onclick = () => res(k); box.appendChild(b);
         });
-        [...box.children].forEach((b, k) => questions[k]._done && b.classList.add('done'));
         box.classList.add('on'); audio.whoosh();
+        if (new URLSearchParams(location.search).has('autopick')) setTimeout(() => res(questions.findIndex((q, k) => !done.has(k))), 1500);
       });
-      questions[i]._done = true; asked++;
+      if (done.has(i)) continue;
+      done.add(i);
       box.classList.remove('on');
       await this.wait(0.4);
       await onAsk(i);
