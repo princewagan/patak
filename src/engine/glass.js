@@ -15,11 +15,16 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
       // windshield: bottom edge center, up-slope unit vector, half width, slope length, x center
       uG0: { value: new THREE.Vector3(-0.22, -0.33, -1.02) }, uGUp: { value: new THREE.Vector3(0, 0.75, 0.47).normalize() },
       uGW: { value: 0.98 }, uGL: { value: 0.88 },
+      // where the two blades are right now (radians from straight up, toward +x), so the glass can stay clear around them
+      uA1: { value: 0 }, uA2: { value: 0 },
+      uP1: { value: new THREE.Vector2(-0.55, -0.06) }, uP2: { value: new THREE.Vector2(0.2, -0.06) },
+      uR1: { value: new THREE.Vector2(0.1, 0.7) }, uR2: { value: new THREE.Vector2(0.09, 0.59) },
+      uMid: { value: 0.45 }, uAmp: { value: 1.05 },
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: /* glsl */`
       uniform sampler2D tDiffuse; uniform float uTime, uRain, uWipe, uWipeT, uBlur, uGW, uGL; uniform vec2 uRes; uniform vec4 uMask;
-      uniform mat4 uInvProj, uCamWorld; uniform vec3 uG0, uGUp;
+      uniform mat4 uInvProj, uCamWorld; uniform vec3 uG0, uGUp; uniform float uA1, uA2, uMid, uAmp; uniform vec2 uP1, uP2, uR1, uR2;
       varying vec2 vUv;
       #define PI 3.14159265
       float h21(vec2 p){ p = fract(p*vec2(233.34, 851.73)); p += dot(p, p+23.45); return fract(p.x*p.y); }
@@ -54,9 +59,9 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
         return vec3(vec2(x, dy*0.3) * m * 3.0, m);
       }
       // seconds since a wiper (pivot p, sweep mid±amp) last passed over this pixel
-      float sinceWipe(vec2 uv, vec2 p, float mid, float amp, float T, float t){
+      float sinceWipe(vec2 uv, vec2 p, vec2 rr, float mid, float amp, float T, float t){
         vec2 d = (uv - p);
-        if (length(d) > 0.8) return 99.0;
+        if (length(d) > rr.y || length(d) < rr.x) return 99.0;
         float phi = atan(d.x, d.y);
         float s = (phi - mid) / amp;
         if (abs(s) > 1.0) return 99.0;
@@ -65,12 +70,12 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
         float t1 = mod(u - a1, 2.0*PI)/w, t2 = mod(u - a2, 2.0*PI)/w;
         return min(t1, t2);
       }
-      float blade(vec2 uv, vec2 p, float mid, float amp, float T, float t){
-        vec2 d = (uv - p); float L = length(d);
-        float ang = mid + amp*sin(2.0*PI*t/T);
+      // 1 close to a blade: the water there is being pushed aside, and the blade itself must stay crisp
+      float nearBlade(vec2 uv, vec2 p, vec2 rr, float ang){
+        vec2 d = uv - p; float L = length(d);
+        if (L < rr.x - 0.03 || L > rr.y + 0.04) return 0.0;
         vec2 dir = vec2(sin(ang), cos(ang));
-        float along = dot(d, dir), across = abs(dot(d, vec2(dir.y, -dir.x)));
-        return (1.0 - smoothstep(0.009, 0.014, across)) * step(0.04, along) * step(along, 0.74);
+        return 1.0 - smoothstep(0.02, 0.075, abs(dot(d, vec2(dir.y, -dir.x))));
       }
       vec3 blur(vec2 uv, float r){
         // 16-tap Vogel disk, rotated per pixel so it reads as fog instead of a grid
@@ -97,13 +102,15 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
         if (mask < 0.001 || uRain < 0.001) { gl_FragColor = texture2D(tDiffuse, uv); return; }
         float t = uTime;
         // wipers
-        float clear = 1.0, bl = 0.0;
-        if (uWipe > 0.5) {
-          vec2 p1 = vec2(-0.55, -0.04), p2 = vec2(0.2, -0.04);
-          float s1 = sinceWipe(gc, p1, 0.45, 1.05, uWipeT, t), s2 = sinceWipe(gc, p2, 0.45, 1.05, uWipeT, t + 0.05);
+        float clear = 1.0, near = 0.0, film = 0.0;
+        if (uWipe > 0.001) {
+          float s1 = sinceWipe(gc, uP1, uR1, uMid, uAmp, uWipeT, t), s2 = sinceWipe(gc, uP2, uR2, uMid, uAmp, uWipeT, t + 0.05);
           float s = min(s1, s2);
-          clear = smoothstep(0.0, 2.2, s);
-          bl = max(blade(gc, p1, 0.45, 1.05, uWipeT, t), blade(gc, p2, 0.45, 1.05, uWipeT, t + 0.05));
+          clear = mix(1.0, smoothstep(0.0, 2.2, s), uWipe);
+          near = max(nearBlade(gc, uP1, uR1, uA1), nearBlade(gc, uP2, uR2, uA2)) * uWipe;
+          // the thin wet film a blade leaves behind: fine arcs that thin out in a moment
+          float rad = s1 < s2 ? length(gc - uP1) : length(gc - uP2);
+          film = exp(-s * 3.2) * (0.5 + 0.5 * sin(rad * 420.0 + sin(rad * 37.0) * 3.0)) * uWipe;
         }
         float dens = uRain * clear;
         vec3 b1 = beads(gc, 34.0, t, 0.75 * dens);
@@ -115,11 +122,11 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
         vec3 mist = blur(uv, 3.5 * uBlur * (0.35 + 0.65*dens));
         vec3 sharp = texture2D(tDiffuse, uv + off * 1.0 - off*0.0).rgb;
         vec3 inDrop = texture2D(tDiffuse, uv - off * 2.2).rgb * 1.08;
-        vec3 col = mix(sharp, mist, mask * (0.25 + 0.75 * dens));
-        col = mix(col, inDrop, cov);
+        vec3 col = mix(sharp, mist, mask * (0.25 + 0.75 * dens) * (1.0 - near));
+        col = mix(col, inDrop, cov * (1.0 - near));
+        col = mix(col, texture2D(tDiffuse, uv + vec2(film * 0.0012, -film * 0.0008)).rgb * 1.04, film * 0.5 * mask * (1.0 - near));
         // tiny highlight on drop tops
         col += vec3(0.06) * smoothstep(0.4, 1.0, -off.y * 40.0) * cov;
-        col = mix(col, vec3(0.01), bl * mask);
         gl_FragColor = vec4(col, 1.0);
       }`,
   });

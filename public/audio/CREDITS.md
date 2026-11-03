@@ -3,6 +3,10 @@
 Everything in `amb/` and `sfx/` was edited (trimmed, looped, filtered, levelled) from these recordings.
 `flood-real.mp3` is Keira and Prince's own recording from August 17, 2026.
 
+## Dialogue: `voice/`
+`voice/01`–`16` are ElevenLabs voices: Avelina (Ale), Archie (Totoy), Marie (Ma'am Joy), Mel (Ate Weng), Laurence (Mark), James (Ikaw), Grandma Sela Tanda (Lola Ising), Cielle (Tindera).
+`voice/17-prince` and `voice/18-keira` are Prince and Keira's own voices. Which line each file is: `src/voice-lines.js`.
+
 ## Real recordings from the Philippines: kevp888, Freesound (CC BY)
 All at https://freesound.org/people/kevp888/sounds/<id>/ under Creative Commons Attribution.
 

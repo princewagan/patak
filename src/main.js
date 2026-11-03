@@ -14,6 +14,7 @@ import { progress } from './engine/kit.js';
 import { Menu, titleRain } from './engine/menu.js';
 import { story, preload } from './story.js';
 import { music } from './engine/music.js';
+import './engine/folk.js';   // people without a realistic model stay as background shadows
 
 const $ = s => document.querySelector(s);
 const engine = new Engine($('#gl'));

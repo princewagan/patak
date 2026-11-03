@@ -10,7 +10,7 @@ const VS = 'attribute vec2 p; varying vec2 v; void main(){ v = p * .5 + .5; gl_P
 const FS = `precision highp float;
 uniform sampler2D P, D, W;
 uniform vec2 R, M;
-uniform float T, IN, FL;
+uniform float T, IN, FL, G, GF;
 uniform vec3 DROP;
 varying vec2 v;
 
@@ -92,11 +92,16 @@ void main(){
   c = mix(c, vec3(.3, .4, .5), fog);
 
   /* lightning lifts the whole picture */
-  c += FL * (vec3(.32, .4, .52) * (.22 + l * 1.5));
+  vec3 lift = vec3(.32, .4, .52) * (.22 + l * 1.5);
+  c += FL * lift;
+
+  /* the gate before the menu: the street is held back in the dark. Only the rain shows,
+     and now and then a far-off flicker gives a glimpse of what is out there. */
+  c = c * mix(1., .045, G) + G * GF * lift * .3;
 
   /* rain */
   float rain = streak(s, 1., 3.2, 0.) * .3 + streak(s + .37, 1.9, 4.4, 5.) * .19 + streak(s + .71, 3.6, 5.8, 9.) * .1;
-  c += rain * vec3(.62, .74, .86) * (.55 + FL * 1.5);
+  c += rain * vec3(.62, .74, .86) * (.55 + FL * 1.5) * mix(1., .6, G);
 
   /* room for the logo and the menu */
   float vig = smoothstep(1.2, .3, length((s - vec2(.42, .55)) * vec2(1.05, 1.2)));
@@ -142,6 +147,7 @@ const CREDITS = [
   '<b>Videoke sa Biñan, Laguna:</b> Björn Eriksson, Aporee at Internet Archive (Public Domain Mark).',
   '<b>Ulan, fast food, baha, at iba pa:</b> martialway47, Sassaby, MrFossy, richwise, logancircle2, lauramellis, unfa, jankisjes, pinchos, Nakhas, AardsReal, zoombackcamera, Cinetony, kalisemorrison, lolamadeus, ViaTorci, kyles, IsakIzzy, MTJohnson, MootMcnoodles, nooly, haulaway, SpaceJoe, aunrea, Weak_Hero, jaziel_.arroyo, ryansitz, rosenberg3, TariqMK (Freesound, CC0).',
   '<b>Mga larawan ng piso:</b> Wikimedia Commons at Wikipedia. Listahan: tex/money/CREDITS.md.',
+  '<b>Kotse sa kalsada:</b> sedan ni TopoSphere sa Sloyd (CC BY 4.0). Detalye: cars/CREDITS.md.',
   'Buong listahan: audio/CREDITS.md. Ang tunog ng baha sa Part Three ay sariling recording namin noong Agosto 17, 2026.',
 ];
 
@@ -171,7 +177,7 @@ export function titleScreen(canvas) {
       const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-      U = Object.fromEntries(['P', 'D', 'W', 'R', 'M', 'T', 'IN', 'FL', 'DROP'].map(n => [n, gl.getUniformLocation(p, n)]));
+      U = Object.fromEntries(['P', 'D', 'W', 'R', 'M', 'T', 'IN', 'FL', 'DROP', 'G', 'GF'].map(n => [n, gl.getUniformLocation(p, n)]));
       gl.uniform1i(U.P, 0); gl.uniform1i(U.D, 1); gl.uniform1i(U.W, 2);
       Promise.all([texture(gl, 0, '/photos/IMG_6457.jpg'), texture(gl, 1, '/depth/IMG_6457.png'), texture(gl, 2, '/depth/IMG_6457_water.png')])
         .then(() => { texturesIn = true; }).catch(e => { console.error('title textures', e); });
@@ -186,6 +192,8 @@ export function titleScreen(canvas) {
 
   /* ---------- state ---------- */
   let shown = false, gate = false, reveal = 0, flash = 0, flicker = 0, nextFlash = 9, drop = [-1, -1, -1], nextDrop = 3.2;
+  // the gate: how dark the street is held (1 = only rain), and the faint far-off flickers that tease it
+  let dark = skipGate ? 0 : 1, lifting = false, revealing = false, glint = 0, glintTwice = 0, nextGlint = 2.2;
   const mouse = [0, 0], eased = [0, 0];
   addEventListener('mousemove', e => { mouse[0] = e.clientX / innerWidth * 2 - 1; mouse[1] = 1 - e.clientY / innerHeight * 2; });
 
@@ -206,16 +214,25 @@ export function titleScreen(canvas) {
     describe(start);
   };
 
-  /* any key or click on the gate: this first gesture is also what browsers need before they allow sound */
+  /* any key or click on the gate: this first gesture is also what browsers need before they allow sound.
+     Thunder breaks right on the press, the flash shows the street for the first time, the rain comes up,
+     and only then does the menu slide in. */
   const leaveGate = () => {
     if (!gate) return;
-    audio.unlock(); audio.titleBed(1); audio.gateOpen();
-    drop = [.3, .2, 0]; nextDrop = 7; nextFlash = 3.5;
-    openMenu();
+    gate = false; revealing = true;
+    audio.unlock(); audio.titleBed(1); audio.gateThunder();
+    flash = 1.5; flicker = 0.12; nextFlash = 9; glint = 0;
+    title.classList.remove('gate'); title.classList.add('strike', 'revealing');
+    setTimeout(() => { lifting = true; }, 140);
+    setTimeout(() => title.classList.remove('strike'), 650);
+    setTimeout(() => { drop = [.3, .2, 0]; nextDrop = 7; audio.titleDrop(); }, 1500);
+    setTimeout(() => { revealing = false; openMenu(); }, 1250);
+    setTimeout(() => title.classList.remove('revealing'), 3600);
   };
   addEventListener('pointerdown', () => { if (gate) leaveGate(); }, true);
   addEventListener('keydown', e => {
     if (title.classList.contains('gone')) return;
+    if (revealing) { e.preventDefault(); e.stopPropagation(); return; }
     if (gate) {
       if (['f', 'm', 'F', 'M', 'Meta', 'Alt', 'Control', 'Shift'].includes(e.key)) return;
       e.preventDefault(); e.stopPropagation(); leaveGate(); return;
@@ -266,7 +283,17 @@ export function titleScreen(canvas) {
       }
     } else {
       reveal = Math.min(1, reveal + dt / 2.4);
-      nextFlash -= dt; nextDrop -= dt;
+      if (gate) {
+        // far-off lightning: a faint double blink, never enough to make out the street
+        nextGlint -= dt;
+        if (nextGlint <= 0) { glint = .7 + Math.random() * .3; glintTwice = .1 + Math.random() * .1; nextGlint = 4.5 + Math.random() * 4.5; }
+        if (glintTwice > 0) { glintTwice -= dt; if (glintTwice <= 0) glint = Math.max(glint, .55); }
+      }
+      if (lifting) dark = Math.max(0, dark - dt / 1.5);
+      glint = Math.max(0, glint * Math.exp(-dt * 7) - dt * .05);
+      if (gate || revealing) { nextDrop = Math.max(nextDrop, 1); }
+      if (!gate) nextFlash -= dt;
+      nextDrop -= dt;
       if (nextFlash <= 0) { flash = 1; flicker = 0.14 + Math.random() * 0.12; nextFlash = 8 + Math.random() * 9; audio.titleThunder(); }
       if (flicker > 0) { flicker -= dt; if (flicker <= 0) flash = Math.max(flash, 0.9); }   // lightning strikes twice in a blink
       if (nextDrop <= 0) { drop = [.16 + Math.random() * .5, .1 + Math.random() * .3, 0]; nextDrop = 6.5 + Math.random() * 3; audio.titleDrop(); }
@@ -278,6 +305,8 @@ export function titleScreen(canvas) {
     if (U && texturesIn) {
       gl.uniform1f(U.T, T); gl.uniform1f(U.IN, reveal * reveal * (3 - 2 * reveal));
       gl.uniform1f(U.FL, flash + (flash > .4 ? Math.random() * .3 : 0));
+      const d = dark * dark * (3 - 2 * dark);
+      gl.uniform1f(U.G, d); gl.uniform1f(U.GF, glint + (glint > .3 ? Math.random() * .2 : 0));
       gl.uniform2f(U.M, eased[0], eased[1]); gl.uniform3f(U.DROP, drop[0], drop[1], drop[2]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }

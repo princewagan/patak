@@ -19,7 +19,9 @@ const ORDER = ['jeep', 'kaha', 'bigas', 'gabi', 'car', 'labas', 'baha', 'ulit', 
 
 export async function preload(engine) {
   engine.onUpdate(dt => tickTweens(dt));
-  if (!new URLSearchParams(location.search).has('noreal')) await preloadReal(['mark', 'joy', 'weng', 'driver', 'boy', 'tindera', 'commuter', 'lola', 'prince', 'keira']);
+  await Promise.all(['500 40px "Cormorant Garamond"', 'italic 500 40px "Cormorant Garamond"', '500 40px Barlow', '600 40px Barlow', '500 40px "Barlow Condensed"', '600 40px "Barlow Condensed"', '700 40px "Barlow Condensed"']
+    .map(f => document.fonts.load(f).catch(() => null)));
+  if (!new URLSearchParams(location.search).has('noreal')) await preloadReal(['mark', 'joy', 'weng', 'driver', 'boy', 'tindera', 'commuter', 'lola', 'prince', 'keira', 'nanay', 'anak', 'tatay', 'kuya', 'panganay']);
   for (const name of ORDER) {
     const f = files[`./scenes/${name}.js`];
     if (!f) continue;
@@ -163,7 +165,7 @@ function chapters(engine, D, S) {
 
     // ================= PART TWO: SA TOTOO LANG =================
     async totoo() {
-      place('Miyerkules, 6:41 AM');
+      D.day('Kinabukasan', 'Miyerkules · 6:41 AM');
       if (has('jeep')) { await show('jeep'); await SCENES.jeep.montage(D, S); }
       else { await D.say('', 'Parehong jeep. Parehong kanto. Sumakay ulit ang bata.'); await D.say('', S.sobre ? 'Hindi ka niya naaalala.' : 'Naglapag ulit siya ng sobre sa kandungan mo.'); }
       if (has('kaha') && SCENES.kaha.montage) { await show('kaha'); await SCENES.kaha.montage(D, S); }
@@ -187,6 +189,7 @@ function chapters(engine, D, S) {
     },
 
     // ================= PART THREE: KAMI =================
+    // Sir plays this part himself, at the wheel and on foot. Keira and Prince only come in once it turns into our telling.
     async kami() {
       await D.lines([{ t: 'Ang susunod ay totoong nangyari.', cls: 'small', hold: 3 }]);
       if (has('car')) await show('car');
@@ -200,6 +203,18 @@ function chapters(engine, D, S) {
 
     async bahay() {
       music.play('tender', 0.4, 6);
+      // from here it's us telling it: what we actually did, then the photos, in order
+      await D.lines([{ t: "Sa amin talaga nangyari 'yan.", hold: 2.8 }, { t: 'Ngayon, kami naman ang magkukuwento.', hold: 3 }]);
+      await D.stats('Ang pinili namin', [
+        { label: 'Maghintay', pct: 100, who: 'Keira · Prince', you: S.baba === 0 || S.baba == null },
+        { label: 'Bumaba', pct: 0, you: S.baba === 1 },
+      ]);
+      await D.lines([
+        { t: 'Naghintay kami sa kotse. Nanood ng isang episode ng <i>Brooklyn Nine-Nine</i>.', alone: true },
+        { t: 'Pagkalipas ng 30 minuto, nagbigay ng suhestiyon si Keira.', alone: true },
+      ]);
+      await D.lines([{ t: '“Maybe we should go down.”', hold: 2.8 }, { t: '“Yeah, you’re right.”', hold: 2.8 }]);
+      await D.lines([{ t: 'Pagbaba namin, si Keira ang unang lumapit at nagtanong.', alone: true }]);
       if (has('baha')) { await show('baha'); await SCENES.baha.play(D, S); }
       audio.stopAll(3); audio.rain(0.3, 0.8);
       music.level(0.95, 4);
@@ -235,13 +250,13 @@ function chapters(engine, D, S) {
         { t: helped.length ? "Kahit isang tao lang, malaking bagay na 'yon." : "At malaking bagay na 'yon.", alone: true },
       ]);
       music.stop(4);
-      place('Huwebes, 6:40 AM');
+      D.day('Huwebes', '6:40 AM · Bukas pa ang sahod', { delay: 1.6, cash: 20, week: [['MAR'], ['MIY'], ['HUW', 'Ngayon', 'now'], ['BIY', 'Sahod', 'pay']] });
       let p;
       if (has('jeep')) { await show('jeep'); p = await SCENES.jeep.again(D, S); }
       else { await D.say('', 'Parehong jeep. Parehong kanto. Sumakay ulit ang bata. May sobre ulit sa kandungan mo.'); p = await D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10, id: 'ulit', def: 1 }); await D.black(true, 1.5); }
       audio.stopAll(2);
       await D.wait(1.2);
-      await D.lines([{ t: p === 0 ? 'Sa tingin mo, hanggang saan aabot ang bente mo?' : 'Bukas, may sobre ulit.', hold: 5.5 }]);
+      await D.lines([{ t: p === 0 ? 'Sa tingin mo, hanggang saan aabot ang malasakit mo?' : 'Bukas, may sobre ulit.', hold: 5.5 }]);
     },
 
     async end() {

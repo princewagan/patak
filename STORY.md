@@ -79,17 +79,18 @@ The rain swells. Then, quietly:
 ---
 
 ## PART THREE: KAMI (us) · Lunes, Agosto 17, 2026 · Brgy. Del Monte, QC
-Card: *"Ang susunod ay totoong nangyari."* Sir now plays as Keira, with Prince driving.
+Card: *"Ang susunod ay totoong nangyari."* **Sir plays this part himself, alone** (Keira, Nov 3): he drives, he gets out, he walks up to the mom and asks. Keira and Prince are not in the car or on the street. They only come in after his questions, when it fades and turns into *our* telling ("Sa amin talaga nangyari 'yan. Ngayon, kami naman ang magkukuwento.").
 **Everything here really happened.** Real photos and timestamps. Nothing invented.
 
-1. **Sa kotse.** Heavy rain, traffic. Prince takes a shortcut through a village in San Francisco del Monte.
+1. **Sa kotse.** Heavy rain, real wipers going. You take a shortcut through a village in San Francisco del Monte.
 2. **2:51 PM: Walang labasan.** Each exit we try is flooded (real photos 2:51, 2:57). Overhead shot: the village is high in the middle and every road out goes down into water.
 3. **Parked, engine running.**
-   **CHOICE (12s timer, timing out means Maghintay):** Maghintay / Bumaba. Whatever he picks, a stats screen shows what we really picked (Maghintay 100%: Keira, Prince), then on black: we waited and watched an episode of Brooklyn Nine-Nine; after 30 minutes, Keira: "Maybe we should go down." Prince: "Yeah, you're right." We go down either way.
-4. **2:57 PM: Sa labas.** Door opens, door closes, we walk a little. The street is full of people who live there, outside their doors, all looking at the same thing: the submerged jeep (the real IMG_6457). Neighbors talk: "Kawawa naman 'yung driver." "Hindi niya nailabas 'yung jeep. Hindi niya kasi alam." Are we going to talk to them? Keira goes first.
+   **CHOICE (12s timer, timing out means Maghintay):** Maghintay / Bumaba. Waiting: half an hour passes, the water is still there, you go down anyway. (What *we* picked, the B99 episode and "Maybe we should go down" / "Yeah, you're right" are told later, in our telling.)
+4. **2:57 PM: Sa labas.** You shut the car door and walk down the lane to the submerged jeep (the real IMG_6457). The people are the three behind us in IMG_6462, dressed as they were: the mom from the house (white tee, navy pants, black umbrella), an older neighbour (grey-violet shirt) and a neighbour in a blue NY cap, black trefoil tee and shorts with his arms crossed. "Kawawa naman 'yung driver." "Hindi niya nailabas 'yung jeep. Hindi niya kasi alam." Kakausapin mo ba sila? You walk up to the mom.
    Sir picks what to ask. Every answer is something they really told us:
    - "Lagi po bang bumabaha rito?" → *Madalas daw. Pero ito na raw ang pinakamalala.*
    - "Bakit po walang madaanan?" → *Mataas daw ang gitna ng village. Lahat ng labasan, pababa.*
+   Then it fades and becomes ours: the stats screen (what we picked: Maghintay 100%), the B99 episode, "Maybe we should go down." / "Yeah, you're right.", and that Keira was the first to go up and ask.
 5. **3:02 PM: CR.** Keira needs a CR. A family we've never met lets us into their house. Water, biscuits, a roof while it pours, and conversation. We stay for a while. They have a dog.
 6. **3:50 PM.** The barangay rescue boat arrives at the corner.
 7. **4:06 PM.** The karinderya. **4:30 PM.** The sari-sari store. Everyone is kind.

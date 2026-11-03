@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { pbr, canvasTex, std, rand } from '../engine/kit.js';
 
 const SHOPS = ['BAKERY', 'LOTTO OUTLET', 'WATER REFILLING STATION', 'VULCANIZING', 'CARINDERIA', 'BIGASAN', 'LAUNDRY SHOP', 'PRINTING · XEROX', 'MOTOR PARTS', 'PHARMACY', 'TAPSILOGAN', 'HARDWARE', 'PAWNSHOP', 'COMPUTER SHOP', 'SARI-SARI STORE', 'BARBERSHOP'];
@@ -118,20 +119,118 @@ export function makeStreet({ L = 90, ground = -0.8, roadX = -1.8, laneW = 3.6, s
   return root;
 }
 
-/** pairs of headlights / taillights that stream past in a lane at x */
+/* ---------------- traffic: real cars driving through the rain with their lights on ----------------
+   One sedan model (CC BY 4.0, TopoSphere via Sloyd; public/cars/CREDITS.md), loaded once, shared by every car.
+   Its nose is at +z. Each car gets its own paint, headlamps with a beam cutting through the rain, a pool of light and
+   wet-road streaks ahead of it, and taillights behind. Lamps ignore the fog, so far cars read as lights before shapes. */
+const CAR_LEN = 4.4;
+const sedan = new GLTFLoader().loadAsync('/cars/sedan.glb').then(g => {
+  const m = g.scene, b = new THREE.Box3().setFromObject(m), sz = b.getSize(new THREE.Vector3());
+  const k = CAR_LEN / sz.z;
+  m.scale.setScalar(k); m.position.set(-(b.min.x + b.max.x) / 2 * k, -b.min.y * k, -(b.min.z + b.max.z) / 2 * k);
+  const out = new THREE.Group(); out.add(m);
+  out.userData.size = sz.multiplyScalar(k);
+  m.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  return out;
+}).catch(e => { console.warn('car model failed, keeping box cars', e); return null; });
+
+const PAINTS = [0xe9e6df, 0xa3a8ad, 0x1b1e22, 0x22344d, 0x8a1f1a, 0xcfc8b6, 0x4a4f55];
+const paintCache = new Map();
+/** the model's own texture, with only the paint (its saturated red) recoloured; glass, chrome and tyres stay */
+function paintOf(base, hex) {
+  if (paintCache.has(hex)) return paintCache.get(hex);
+  const m = base.clone();
+  m.roughness = 0.32; m.metalness = 0.25; m.envMapIntensity = 1.2;
+  const tint = new THREE.Color(hex);
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTint = { value: tint };
+    sh.fragmentShader = 'uniform vec3 uTint;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      { vec3 c = diffuseColor.rgb; float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+        float l = dot(c, vec3(.3, .59, .11));
+        diffuseColor.rgb = mix(c, uTint * (.38 + l * 1.5), smoothstep(.1, .3, sat)); }`);
+  };
+  m.customProgramCacheKey = () => 'paint' + hex;
+  paintCache.set(hex, m); return m;
+}
+
+const glowTex = canvasTex(64, 64, (c, w, h) => {
+  const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,.55)'); g.addColorStop(0.5, 'rgba(255,255,255,.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+}, { srgb: false });
+
+/** light that fades along a shape (uv.y = 1 at the lamp) and toward its sides; additive, with its own fog falloff */
+function lightMat(color, k, { side = 2.0, fres = 0 } = {}) {
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    uniforms: { c: { value: new THREE.Color(color) }, k: { value: k } },
+    vertexShader: `varying vec2 vUv; varying float vF, vD;
+      void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.); vD = -mv.z;
+        vec3 n = normalize(normalMatrix * normal); vF = abs(dot(n, normalize(-mv.xyz))); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 c; uniform float k; varying vec2 vUv; varying float vF, vD;
+      void main(){
+        // every pow() gets a clamped base: on Metal pow(-1e-8, y) is NaN, and the bloom spreads one NaN over the whole screen
+        float along = pow(clamp(vUv.y, 0., 1.), 2.2), across = 1. - pow(clamp(abs(vUv.x * 2. - 1.), 0., 1.), ${side.toFixed(1)});
+        float f = max(vD, 0.) * .03;
+        float a = along * ${fres ? 'pow(clamp(vF, 0., 1.), 1.6)' : 'across'} * k * exp(-f * f);
+        gl_FragColor = vec4(c * a, 1.); }`,
+  });
+}
+
+// shared lamp geometry and materials
+const HEAD = 0xfff1d6, TAIL = 0xff2a1a;
+const headCore = new THREE.MeshBasicMaterial({ color: new THREE.Color(HEAD).multiplyScalar(6), fog: false });
+const tailCore = new THREE.MeshBasicMaterial({ color: new THREE.Color(TAIL).multiplyScalar(3.2), fog: false });
+const headGlow = new THREE.SpriteMaterial({ map: glowTex, color: HEAD, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0.85 });
+const tailGlow = new THREE.SpriteMaterial({ map: glowTex, color: TAIL, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0.6 });
+const beamGeo = (() => { const g = new THREE.ConeGeometry(2.4, 13, 24, 1, true); g.rotateX(-Math.PI / 2); g.translate(0, 0, 6.5); g.rotateX(0.075); return g; })();
+const beamM = lightMat(HEAD, 0.075, { fres: 1 });
+const poolGeo = (() => { const g = new THREE.PlaneGeometry(3.6, 12); g.rotateX(-Math.PI / 2); g.translate(0, 0.02, 6); return g; })();
+const poolM = lightMat(HEAD, 0.24, { side: 1.6 });
+const streakGeo = (() => { const g = new THREE.PlaneGeometry(0.32, 7); g.rotateX(-Math.PI / 2); g.translate(0, 0.025, 3.5); return g; })();
+const streakM = lightMat(HEAD, 0.5, { side: 2 });
+const tailStreakM = lightMat(TAIL, 0.32, { side: 2 });
+
+function lamps(len) {
+  const g = new THREE.Group(), front = len / 2, back = -len / 2;
+  for (const sx of [-0.62, 0.62]) {
+    const h = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), headCore); h.scale.z = 0.35; h.position.set(sx, 0.66, front + 0.02); g.add(h);
+    const hg = new THREE.Sprite(headGlow); hg.scale.setScalar(1.5); hg.position.set(sx, 0.66, front + 0.12); g.add(hg);
+    const st = new THREE.Mesh(streakGeo, streakM); st.position.set(sx, 0, front); g.add(st);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.03), tailCore); t.position.set(sx * 1.05, 0.78, back - 0.01); g.add(t);
+    const tg = new THREE.Sprite(tailGlow); tg.scale.setScalar(0.8); tg.position.set(sx * 1.05, 0.78, back - 0.1); g.add(tg);
+    const ts = new THREE.Mesh(streakGeo, tailStreakM); ts.scale.set(1, 1, 0.55); ts.rotation.y = Math.PI; ts.position.set(sx * 1.05, 0, back); g.add(ts);
+  }
+  const beam = new THREE.Mesh(beamGeo, beamM); beam.position.set(0, 0.66, front); g.add(beam);
+  const pool = new THREE.Mesh(poolGeo, poolM); pool.position.z = front; g.add(pool);
+  g.traverse(o => { o.renderOrder = 2; });
+  return g;
+}
+
+/** cars that stream past in a lane at x. dir 1: they drive toward +z (oncoming for a camera looking down -z). */
 export class Traffic {
-  constructor({ x = -3.6, y = -0.2, count = 6, L = 120, dir = 1, color = 0xfff1d6, tail = false } = {}) {
+  constructor({ x = -3.6, y = -0.2, count = 6, L = 120, dir = 1 } = {}) {
     this.group = new THREE.Group(); this.L = L; this.dir = dir; this.cars = [];
-    const lightM = new THREE.MeshBasicMaterial({ color: new THREE.Color(tail ? 0xff2a1a : color).multiplyScalar(tail ? 3 : 5) });
-    const bodyM = std(0x24282d, { rough: 0.35, metal: 0.5 });
+    const boxM = std(0x24282d, { rough: 0.35, metal: 0.5 });
     for (let i = 0; i < count; i++) {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.2, 4), bodyM); body.position.y = 0.6; g.add(body);
-      for (const sx of [-0.62, 0.62]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), lightM); l.position.set(sx, 0.55, dir > 0 ? -2.02 : 2.02); l.scale.z = 0.3; g.add(l); }
-      g.position.set(x, y, -i * L / count);
+      // until the model arrives (or if it fails), a dark box stands in, lit the same way
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.2, 4), boxM); body.position.y = 0.6; g.add(body); g.userData.body = body;
+      g.add(lamps(CAR_LEN));
+      g.rotation.y = dir > 0 ? 0 : Math.PI;   // the nose faces the way it drives
+      g.position.set(x + (Math.random() - 0.5) * 0.3, y, -i * L / count - Math.random() * 6);
       g.userData.speed = 9 + Math.random() * 5;
+      g.userData.paint = PAINTS[(i * 3 + Math.floor(Math.random() * 3)) % PAINTS.length];
       this.group.add(g); this.cars.push(g);
     }
+    sedan.then(model => {
+      if (!model) return;
+      for (const g of this.cars) {
+        const car = model.clone(true);
+        car.traverse(o => { if (o.isMesh) o.material = paintOf(o.material, g.userData.paint); });
+        g.remove(g.userData.body); g.add(car);
+      }
+    });
   }
   update(dt, worldSpeed) {
     for (const c of this.cars) {

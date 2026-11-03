@@ -70,23 +70,28 @@ export default {
     F.add(new THREE.HemisphereLight(0xfff0e0, 0x3a3230, 1.7));
     const warm = new THREE.PointLight(0xffc79a, 7, 9, 1.2); warm.position.set(1.6, 1.0, -4.2); F.add(warm);
     const low = new THREE.PointLight(0xffd8b8, 3.5, 6, 1.2); low.position.set(-0.1, -0.8, -4.4); F.add(low);
+    const PI = Math.PI;
     const fig = (o, x, z, ry) => { const p = new Person({ slippers: true, ...o }); p.root.scale.setScalar(1.3); p.root.position.set(x, -1.98, z); p.root.rotation.y = ry; F.add(p.root); return p; };
-    // white tee, dark pants (IMG_6475)
-    this.nanay = fig({ h: 1.76, skin: 0xa98068, top: 0xd8d6d0, bottom: 0x15171b, hair: 'bun', build: 0.9, sleeve: 0.12 }, 1.25, -7.6, -0.4);
+    // the mom: white tee, navy pants, white slides (IMG_6475, and under the umbrella in IMG_6462)
+    this.nanay = fig({ real: 'nanay', h: 1.76, build: 0.9 }, 1.25, -7.6, -0.4);
     // striped top: bands by height on the body, so they stay on her when she moves
     const stripe = new THREE.MeshStandardMaterial({ color: 0xb8b6b0, roughness: 0.9 });
     stripe.onBeforeCompile = s => {
       s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying float vBand;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvBand = position.y;');
       s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vBand;').replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb *= mix(0.12, 1.0, step(0.5, fract(vBand * 16.0)));');
     };
-    this.anak = fig({ h: 1.6, skin: 0xa98068, topMat: stripe, bottom: 0x20242c, hair: 'long', build: 0.88, sleeve: 0.11 }, -0.6, -5.75, 0.35);
-    this.anak.pose('crouch', true).set({ neck: [12, 0, 0] }, true);
+    // her daughter: black-and-white striped tee, long black hair, shorts, with the dog (IMG_6475)
+    this.anak = fig({ real: 'anak', h: 1.6, build: 0.88 }, -0.48, -5.75, 0.35);
+    this.anak.pose('kneelDown', true).set({ spine: [24, 0, 0], neck: [26, 0, 0], shL: [-20, 0, 8], elL: [-60, 0, 0] }, true);
     this.dog = dog(); this.dog.scale.setScalar(1.12); this.dog.position.set(0.02, -1.98, -5.55); this.dog.rotation.y = 0.5; F.add(this.dog);
+    // her hand on the dog's back
+    { const v = new THREE.Vector3(); this.anak.reach('R', () => this.dog.localToWorld(v.set(0.02, 0.4, -0.02)), { rate: 30, pole: [-1, -0.8, -0.3] }); }
     // what she brings: a glass of water and a pack of biscuits
     const glass = cyl(0.03, 0.026, 0.1, new THREE.MeshPhysicalMaterial({ color: 0xd8e6ee, roughness: 0.08, transparent: true, opacity: 0.5 }), 14);
-    const pack = box(0.15, 0.04, 0.09, std(0xd9c17a, { rough: 0.5 }), 0.006);
-    this.nanay.arm.R.wr.add(at(glass, 0.0, -0.1, 0.03)); this.nanay.arm.L.wr.add(at(pack, 0.0, -0.1, 0.02));
-    this.nanay.set({ shR: [-34, 0, -6], elR: [-68, 0, 0], shL: [-34, 0, 6], elL: [-68, 0, 0] }, true);
+    const water = cyl(0.026, 0.023, 0.07, new THREE.MeshPhysicalMaterial({ color: 0xbcd4e0, roughness: 0.05, transparent: true, opacity: 0.55 }), 14); water.position.y = -0.012; glass.add(water);
+    const pack = box(0.15, 0.035, 0.09, std(0xd9c17a, { rough: 0.5 }), 0.006);
+    this.nanay.arm.R.wr.add(at(glass, 0.0, -0.085, 0.035)); this.nanay.arm.L.wr.add(at(pack, 0.0, -0.075, 0.03, 0, 0, PI / 2));
+    this.nanay.set({ shR: [-14, 0, -8], elR: [-66, 0, 0], shL: [-14, 0, 8], elL: [-66, 0, 0] }, true);
 
     // compile the family's materials during the loading screen, not when the room fades in
     F.visible = true;
@@ -133,7 +138,7 @@ export default {
     await this.go(D, 'house', { fade: 1.6 });
     await D.say('', 'Kailangan nang mag-CR ni Keira. Pinapasok kami ng isang pamilyang hindi namin kilala.');
     const n = this.nanay;
-    walkPath(n, [[0.95, -1.98, -6.9], [0.7, -1.98, -6.05]], 0.85).then(() => n.set({ shR: [-52, 0, -6], elR: [-44, 0, 0], shL: [-52, 0, 6], elL: [-44, 0, 0], neck: [10, 0, 0] }));
+    walkPath(n, [[0.95, -1.98, -6.9], [0.7, -1.98, -6.05]], 0.85).then(() => n.set({ shR: [-34, 0, -8], elR: [-62, 0, 0], shL: [-34, 0, 8], elL: [-62, 0, 0], neck: [10, 0, 0] }));
     await D.say('', 'Tubig. Biskwit. Silong habang bumubuhos. Kuwentuhan.');
     await D.say('', 'May aso sila. Mga apatnapung minuto kami roon.');
     await this.go(D, 'boat');

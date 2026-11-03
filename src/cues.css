@@ -61,3 +61,59 @@
 #ihud .day.pay b, #ihud .day.pay i { color: #05080b; }
 #ihud .week > span { display: block; margin-top: calc(var(--u) * 1); font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.5); line-height: 1.1; color: #fff; text-shadow: 0 0 calc(var(--u) * .7) #000; opacity: 0; transition: opacity .3s; }
 #ihud .week.noted > span { opacity: 1; }
+
+/* ---------- a choice on the clock: the edges close in and pulse with the heart, the colour drains ---------- */
+#press { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .7s ease; overflow: hidden; }
+#press::before, #press::after { content: ''; position: absolute; inset: -7%; }
+#press::before { background: radial-gradient(ellipse 60% 55% at 50% 44%, transparent 26%, rgba(0, 0, 0, .58) 62%, rgba(0, 0, 0, .96) 100%); }
+#press::after { background: radial-gradient(ellipse 60% 55% at 50% 44%, transparent 36%, rgba(165, 14, 8, .5) 100%); opacity: 0; transition: opacity 1.2s ease; }
+body.pressing #press { opacity: 1; }
+body.pressing-hard #press::after { opacity: 1; }
+#press.beat::before { animation: pressbeat .55s cubic-bezier(.2, .8, .3, 1); }
+@keyframes pressbeat { 0% { transform: none; } 14% { transform: scale(.95); } 100% { transform: none; } }
+canvas#gl { transition: filter 1s ease, transform 5s cubic-bezier(.2, .7, .3, 1); }
+body.pressing canvas#gl { filter: saturate(.42) contrast(1.07) brightness(.94); transform: scale(1.025); }
+
+/* what helping costs him, under the option */
+#choice .opt .cost { display: block; margin-top: calc(var(--u) * .4); font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 1.5); line-height: 1.15; color: #ffb4ad; }
+#choice .opt .cost[hidden] { display: none; }
+#choice .opt .cost b { display: inline-block; margin-right: .45em; padding: .06em .4em .02em; background: var(--warn); color: #fff; font-weight: 700; font-size: .8em; letter-spacing: .04em; text-transform: uppercase; vertical-align: .08em; }
+#choice .opt.hl .cost, #choice .opt.picked .cost { color: #b3261e; }
+body.pressing #choice .opt:not(.dim) { box-shadow: none; }
+
+/* ---------- what his choice did to someone: a slanted plate top left ---------- */
+#toast { position: absolute; left: calc(var(--u) * 4); top: calc(var(--bar) + var(--u) * 2.4); z-index: 8; display: flex; align-items: stretch; pointer-events: none; opacity: 0; transform: skewX(-9deg); filter: drop-shadow(0 calc(var(--u) * .3) calc(var(--u) * 1) rgba(0, 0, 0, .55)); }
+#toast.on { opacity: 1; }
+#toast .icon { position: relative; flex: none; width: calc(var(--u) * 5.4); display: grid; place-items: center; background: var(--hot); }
+#toast .icon svg { position: relative; z-index: 1; width: calc(var(--u) * 1.8); fill: #05080b; transform: skewX(9deg); }
+#toast .ring { position: absolute; left: 50%; top: 58%; width: calc(var(--u) * 4); height: calc(var(--u) * 1.4); margin: calc(var(--u) * -.7) 0 0 calc(var(--u) * -2); border: 2px solid rgba(5, 8, 11, .55); border-radius: 50%; opacity: 0; }
+#toast .body { position: relative; padding: calc(var(--u) * .7) calc(var(--u) * 2.6) calc(var(--u) * .75) calc(var(--u) * 1.3); background: rgba(4, 7, 10, .9); clip-path: polygon(0 0, 100% 0, calc(100% - var(--u) * 1) 100%, 0 100%); }
+#toast .kick { font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 1.35); line-height: 1; letter-spacing: .07em; text-transform: uppercase; color: var(--hot); }
+#toast .who { margin-top: calc(var(--u) * .3); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 3.5); line-height: .95; letter-spacing: -.005em; text-transform: uppercase; color: #fff; }
+#toast .state { margin-top: calc(var(--u) * .3); font-family: var(--text); font-weight: 500; font-size: calc(var(--u) * 1.65); line-height: 1.15; color: #fff; }
+#toast .shine { position: absolute; top: 0; bottom: 0; left: 0; width: 30%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .28), transparent); opacity: 0; pointer-events: none; }
+#toast.no .icon { background: rgba(255, 255, 255, .16); }
+#toast.no .icon svg { fill: rgba(255, 255, 255, .55); }
+#toast.no .kick { color: rgba(255, 255, 255, .5); }
+#toast.no .state { color: var(--soft); }
+#toast.on .icon { animation: toasticon .46s cubic-bezier(.12, 1.15, .3, 1) both; }
+#toast.on .icon svg { animation: toastdrop .5s cubic-bezier(.5, 0, .8, .5) .1s both; }
+#toast.yes.on .ring { animation: toastring 1.3s ease-out .5s both; }
+#toast.yes.on .ring + .ring { animation-delay: .72s; }
+#toast.on .body { animation: toastbody .5s cubic-bezier(.16, .9, .24, 1) .14s both; }
+#toast.on .body > * { animation: toastline .5s cubic-bezier(.16, .9, .24, 1) both; }
+#toast.on .kick { animation-delay: .24s; } #toast.on .who { animation-delay: .3s; } #toast.on .state { animation-delay: .4s; }
+#toast.yes.on .shine { animation: toastshine .9s ease .62s both; }
+#toast.off { animation: toastout .5s ease-in forwards; }
+@keyframes toasticon { 0% { opacity: 0; transform: translateX(calc(var(--u) * -3)) scale(1.35); } 100% { opacity: 1; transform: none; } }
+@keyframes toastdrop { 0% { opacity: 0; transform: skewX(9deg) translateY(calc(var(--u) * -2.6)); } 70% { opacity: 1; } 100% { opacity: 1; transform: skewX(9deg); } }
+@keyframes toastring { 0% { opacity: .9; transform: scale(.2); } 100% { opacity: 0; transform: scale(1.4); } }
+@keyframes toastbody { 0% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); } 100% { clip-path: polygon(0 0, 100% 0, calc(100% - var(--u) * 1) 100%, 0 100%); } }
+@keyframes toastline { 0% { opacity: 0; transform: translateX(calc(var(--u) * -1.4)); } 100% { opacity: 1; transform: none; } }
+@keyframes toastshine { 0% { opacity: 1; transform: translateX(-120%); } 100% { opacity: 1; transform: translateX(380%); } }
+@keyframes toastout { to { opacity: 0; transform: skewX(-9deg) translateX(calc(var(--u) * -6)); } }
+#patak { display: none; }
+
+/* ---------- a new day: the same slanted plates as the morning, sized for longer words ---------- */
+#ihud.dayhud .name b { font-size: calc(var(--u) * 8.6); }
+#ihud.dayhud .name span { font-size: calc(var(--u) * 2.6); }

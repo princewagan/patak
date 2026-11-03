@@ -40,7 +40,7 @@ function realMaterial(src, tx, part) {
   const m = new THREE.MeshStandardMaterial({
     name: src.name, map: tx.color || null, normalMap: tx.normal || null,
     roughness: part === 'head' ? 0.52 : 0.76, metalness: 0,
-    alphaTest: part === 'opacity' ? 0.45 : 0, side: part === 'opacity' ? THREE.DoubleSide : THREE.FrontSide,
+    alphaTest: part === 'opacity' ? 0.45 : 0, alphaToCoverage: part === 'opacity', side: part === 'opacity' ? THREE.DoubleSide : THREE.FrontSide,
   });
   return m;
 }
@@ -51,7 +51,7 @@ export async function loadReal(name) {
   const p = (async () => {
     const dir = `${BASE}${name}/`;
     const manifest = await (await fetch(dir + 'manifest.json')).json();
-    const group = (await new GLTFLoader().loadAsync(dir + name + '.glb')).scene;
+    const group = (await new GLTFLoader().loadAsync(dir + (manifest.glb || name + '.glb'))).scene;
     const tx = {};
     await Promise.all(Object.entries(manifest.tex).flatMap(([part, set]) => { tx[part] = {}; return Object.entries(set).map(async ([k, f]) => { tx[part][k] = await loadTex(dir + f, k === 'color'); }); }));
     group.traverse(o => {
@@ -115,6 +115,9 @@ export class RealBody {
       applySub(th, preRoot(`Bip01_${sd}_Thigh`, `Bip01_${sd}_Calf`));
     }
 
+    this.headRest = W.get(headB).clone();
+    this.capScale = ((C.neckY + 0.062) * s / 1.52) / headB.getWorldScale(V()).x;
+
     // l = W(parent)⁻¹ · r · W(bone): the joint's rotation carried over into this rig's bone frames
     this.links = [];
     const byBone = new Map(Object.entries(JOINT_BONE).map(([j, n]) => [n, j]));
@@ -139,10 +142,43 @@ export class RealBody {
     this.morph = []; g.traverse(n => { if (n.isMesh && n.morphTargetDictionary) this.morph.push(n); });
     this.upper = { L: g.getObjectByName('Bip01_L_UpperArm'), R: g.getObjectByName('Bip01_R_UpperArm') };
     this.hand = { L: g.getObjectByName('Bip01_L_Hand'), R: g.getObjectByName('Bip01_R_Hand') };
+    this.foot = { L: g.getObjectByName('Bip01_L_Foot'), R: g.getObjectByName('Bip01_R_Foot') };
+    this.thigh = { L: g.getObjectByName('Bip01_L_Thigh'), R: g.getObjectByName('Bip01_R_Thigh') };
+    this.calf = { L: g.getObjectByName('Bip01_L_Calf'), R: g.getObjectByName('Bip01_R_Calf') };
     this._d = V(); this._w = V();
     this.blinkV = 0; this.talk = 0;
     this._v = V(); this._q = Q(); this._e = new THREE.Euler();
   }
+
+  /**
+   * A cap that actually sits on this head. It hangs off the real head bone, in metres, with Y up and Z toward the face,
+   * so it turns with the head and never drifts onto the face.
+   */
+  wearCap(color, { logo, y = 0, z = 0, size = 1 } = {}) {
+    const hold = new THREE.Group(); this.headBone.add(hold);
+    hold.quaternion.copy(this.headRest.clone().invert()); hold.scale.setScalar(this.capScale);
+    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.82 }), R = 0.1 * size, cap = new THREE.Group(); hold.add(cap);
+    cap.position.set(0, 0.158 + y, -0.012 + z);   // the head bone's pivot is at the top of the neck: the brim sits at the brow
+    // crown: a soft six-panel dome that comes down to the brow
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.57), m); crown.scale.set(1.14, 1.02, 1.19); crown.rotation.x = 0.04; crown.castShadow = true; cap.add(crown);
+    // the sweatband edge, down over the hair all the way round
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.035, R * 1.05, 0.032, 32, 1, true), m); band.scale.set(1.1, 1, 1.17); band.position.y = -0.016; cap.add(band);
+    const btn = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 6), m); btn.scale.y = 0.5; btn.position.set(0, R * 0.945, 0.004); cap.add(btn);
+    // brim: a curved peak, stiffer and darker underneath
+    const N = 26, M = 6, pos = [], idx = [];
+    for (let j = 0; j <= M; j++) for (let i = 0; i <= N; i++) {
+      const u = i / N * 2 - 1, v = j / M, a = u * 1.12, r = R * 0.98 + v * (0.082 * size) * (1 - 0.45 * u * u);
+      pos.push(Math.sin(a) * r * 0.95, -0.0015 - u * u * 0.024 - v * 0.012 - v * v * 0.004, Math.cos(a) * r * 1.08);
+    }
+    for (let j = 0; j < M; j++) for (let i = 0; i < N; i++) { const a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    const brim = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 0.78, side: THREE.DoubleSide })); brim.rotation.x = 0.06; brim.position.y = -0.006; brim.scale.set(1.1, 1, 1.08); brim.castShadow = true; cap.add(brim);
+    if (logo) { const t = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.05), new THREE.MeshStandardMaterial({ map: logo, transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 })); t.position.set(0, 0.038, R * 1.11); t.rotation.x = -0.3; cap.add(t); }
+    this.cap = cap; return cap;
+  }
+
+  /** first person: this body has no head to get in front of the camera */
+  hideHead() { this.headBone.scale.setScalar(1e-3); }
 
   setMorph(key, v) { for (const m of this.morph) { const i = m.morphTargetDictionary[key]; if (i !== undefined) m.morphTargetInfluences[i] = v; } }
 

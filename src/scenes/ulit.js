@@ -36,6 +36,7 @@ const GRADES = {
 };
 
 export default {
+  ao: true,   // contact shadows (see Engine)
   grade: GRADES.totoy,
   dof: { focus: 2.5, aperture: 0.004, maxblur: 0.008 },
 
@@ -125,6 +126,8 @@ export default {
     const lampL = new THREE.PointLight(0xff9a3c, 4, 14, 1.6); lampL.position.copy(lamp.position); G.add(lampL);
     G.add(new THREE.HemisphereLight(0x7186a0, 0x15130f, 0.4));
     const fill = new THREE.PointLight(0xffb878, 1.6, 3.2, 1.8); fill.position.set(0.55, 1.05, -1.25); G.add(fill);
+    // the street-side face of whoever stands out front, so Totoy reads as a boy and not a shape
+    const front = new THREE.PointLight(0xffc48e, 3.2, 4.5, 1.6); front.position.set(-0.1, 1.5, 1.4); G.add(front);
 
     // ---- Totoy ----
     const boy = this.boy = new Person({ real: 'boy', h: 1.24, skin: 'brown', top: 0xb9b19c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
@@ -202,16 +205,38 @@ export default {
       p.root.position.set(x, 0, z); p.root.rotation.y = PI; p.walk = 1; G.add(p.root); this.people.push(p); this.farKids.push(p);
     }
     // Ate Weng's eldest, with the new illustration board
-    const kid = this.kid = new Person({ h: 1.46, skin: 'tan', top: 0xf2f1ec, bottom: 0x1d2740, hair: 'short', build: 0.86, shoes: 0x111111 });
+    const kid = this.kid = new Person({ real: 'panganay', h: 1.46, build: 0.86 });
     G.add(kid.root); this.people.push(kid);
-    const pack = box(0.27, 0.34, 0.13, std(0x23365a, { rough: 0.85 }), 0.04); pack.position.set(0, 0.15, -0.15); kid.spine.add(pack);
-    const ill = this.board = box(0.006, 0.38, 0.51, new THREE.MeshStandardMaterial({ color: 0xf6f5f0, roughness: 0.6 }));
-    ill.position.set(-0.17, 0.02, 0.06); kid.spine.add(ill);
+    // a real school backpack: soft body, front pocket, padded straps over the shoulders, a grab loop
+    { const B = new THREE.Group(), cl = new THREE.MeshStandardMaterial({ color: 0x23365a, roughness: 0.82 }), dk = new THREE.MeshStandardMaterial({ color: 0x151d2e, roughness: 0.75 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), cl); body.scale.set(0.135, 0.18, 0.07); body.position.set(0, 0, -0.01); body.castShadow = true; B.add(body);
+      const pocket = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), cl); pocket.scale.set(0.105, 0.08, 0.04); pocket.position.set(0, -0.07, -0.05); B.add(pocket);
+      const zip = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.003, 4, 30, Math.PI), dk); zip.position.set(0, -0.045, -0.075); zip.rotation.x = 0.35; zip.scale.y = 0.5; B.add(zip);
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 6, 14, Math.PI), dk); loop.position.set(0, 0.175, 0.01); B.add(loop);
+      for (const sx of [-1, 1]) {
+        const c = new THREE.CatmullRomCurve3([[sx * 0.06, 0.16, 0.04], [sx * 0.085, 0.215, 0.1], [sx * 0.095, 0.17, 0.2], [sx * 0.1, 0.02, 0.22], [sx * 0.12, -0.12, 0.13], [sx * 0.11, -0.16, 0.03]].map(v => new THREE.Vector3(...v)));
+        const st = new THREE.Mesh(new THREE.TubeGeometry(c, 24, 0.014, 6, false), dk); st.scale.z = 1; B.add(st);
+      }
+      B.position.set(0, 0.13 * kid.s, -0.165 * kid.s); kid.spine.add(B); this.pack = B; }
+    // the illustration board: a finished project, carried flat against his chest in both arms
+    const boardT = canvasTex(512, 384, (c, w, h) => {
+      c.fillStyle = '#f7f6f1'; c.fillRect(0, 0, w, h); c.strokeStyle = '#2b4a8a'; c.lineWidth = 6; c.strokeRect(14, 14, w - 28, h - 28);
+      c.fillStyle = '#1c2f5c'; c.font = 'bold 38px "Bradley Hand","Comic Sans MS",cursive'; c.textAlign = 'center'; c.fillText('ANG SOLAR SYSTEM', w / 2, 70);
+      c.fillStyle = '#f2b632'; c.beginPath(); c.arc(70, 220, 46, 0, 7); c.fill();
+      [[150, 10, '#9a8f86'], [205, 14, '#d9a35a'], [265, 15, '#3d7ab8'], [320, 12, '#c0512f'], [385, 28, '#d7b07a'], [455, 24, '#e2c98f']].forEach(([x, r, col]) => { c.strokeStyle = 'rgba(40,40,60,.25)'; c.lineWidth = 2; c.beginPath(); c.arc(70, 220, x - 70, -0.5, 0.5); c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(x, 220, r, 0, 7); c.fill(); });
+      c.fillStyle = '#333'; c.font = '18px Inter, sans-serif'; c.textAlign = 'right'; c.fillText('Grade 8 · Science', w - 30, h - 30);
+    });
+    const ill = this.board = new THREE.Group();
+    ill.add(at(box(0.51, 0.38, 0.004, new THREE.MeshStandardMaterial({ color: 0xb9b7b0, roughness: 0.7 })), 0, 0, 0));
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.505, 0.375), new THREE.MeshStandardMaterial({ map: boardT, color: 0xa8a7a2, roughness: 0.75 })); face.position.z = 0.0025; ill.add(face);
+    ill.position.set(0, 0.06, 0.2 * kid.s); ill.rotation.set(-0.1, 0, 0); kid.spine.add(ill);
+    this.boardL = new THREE.Object3D(); this.boardL.position.set(0.25, -0.04, 0.0); ill.add(this.boardL);
+    this.boardR = new THREE.Object3D(); this.boardR.position.set(-0.25, -0.06, 0.0); ill.add(this.boardR);
     G.add(this.kidShadow = blob(0.3, 0.35));
     // Ate Weng + the neighbor at her gate (left side, gate at z = -1.2 + ... see loop: first left gate is at z = 2.8)
     const weng = this.ateWeng = new Person({ real: 'weng', h: 1.56, skin: 'tan', top: 0xb98a92, bottom: 0x2b2d33, hair: 'bun', build: 1.1 });
     G.add(weng.root); this.people.push(weng);
-    const nb = this.neighbor = new Person({ h: 1.53, skin: 'light', top: 0x6d8fa6, bottom: 0x6d8fa6, skirt: true, hair: 'short', hairColor: 0x7d7770, build: 1.15 });
+    const nb = this.neighbor = new Person({ real: 'commuter', h: 1.53, build: 1.1 });
     G.add(nb.root); this.people.push(nb);
     const bill = this.bill = new THREE.Group();   // ₱200: two ₱100 notes
     for (const i of [0, 1]) { const n = billMesh(100, 0.15); n.rotation.set(-PI / 2, 0, i * 0.12); n.position.y = i * 0.002; bill.add(n); }
@@ -398,13 +423,14 @@ export default {
     if (helped) {
       const kid = this.kid;
       kid.root.position.set(0.15, 0, 1.6); kid.root.rotation.y = PI;
-      kid.pose('stand', true).set({ shR: [-6, 0, -16], elR: [-34, 0, 0], shL: [0, 0, 6] }, true);
-      walkPath(kid, [[0.05, 0, -7.5]], 0.95).then(() => kid.set({ shR: [-6, 0, -16], elR: [-34, 0, 0] }));
-      // keep the arm clamped on the board while walking
-      kid.anim = (t, p) => { p.arm.R.sh.rotation.set(-0.1, 0, -0.28); p.arm.R.el.rotation.x = -0.6; };
-      rig.set({ pos: [0.8, 1.3, 4.3], look: [0.1, 0.78, -3], fov: 36 });
-      rig.move({ pos: [0.55, 1.22, -0.9], look: [0.0, 0.72, -9], fov: 33, dur: 10.5, e: 'sine' });
-      this.engine.dof({ target: this.board, aperture: 0.004, maxblur: 0.008 });
+      kid.pose('stand', true); kid.expression({ smile: 0.5 });
+      kid.reach('L', this.boardL, { rate: 30, pole: [1, -1, -0.2] }); kid.reach('R', this.boardR, { rate: 30, pole: [-1, -1, -0.2] });
+      // he walks toward us, the board held in front of him so we can see it; we back away ahead of him
+      kid.root.position.set(0.1, 0, -6.5); kid.root.rotation.y = 0;
+      walkPath(kid, [[0.15, 0, 1.2]], 0.85);
+      rig.set({ pos: [0.55, 1.18, -3.2], look: [0.1, 0.95, -6.5], fov: 34 });
+      rig.move({ pos: [0.5, 1.12, 3.4], look: [0.12, 0.92, 0.4], fov: 32, dur: 10.5, e: 'linear' });
+      this.engine.dof({ target: this.board, aperture: 0.003, maxblur: 0.007 });
     } else {
       const w = this.ateWeng, nb = this.neighbor;
       // first left gate sits at x≈-2.9, z = 4 - 1.2 = 2.8

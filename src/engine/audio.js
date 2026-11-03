@@ -1,9 +1,13 @@
 /* The world is real recordings from public/audio (see CREDITS.md). Small timed details and the UI are synthesized.
    Everything that belongs to the world runs through `world`, so it can be ducked under music or a tense moment;
-   `master` carries the world plus UI, and music.js connects straight to it. */
+   `master` carries the world plus UI, and music.js connects straight to it. Recorded dialogue (voice()) also goes straight to master. */
+import { VOICE_URLS } from '../voice-lines.js';
+
 const AMB = n => `/audio/amb/${n}.mp3`;
 const SFX = n => `/audio/sfx/${n}.mp3`;
+const UNDER_VOICE = 0.65; // the world's level while someone is speaking
 const FILES = [
+  ...VOICE_URLS,
   ...['jeep_ride', 'jeep_idle', 'jeep_talk', 'street_mnl', 'street_ph', 'rain_out', 'roof_tin', 'roof_night', 'roof_in', 'car_rain', 'fastfood', 'fastfood2', 'mall_ph', 'videoke', 'fan_real', 'night_sub', 'morning', 'rooster_rain', 'crowd_ph', 'water_rush'].map(AMB),
   ...['thunder1', 'thunder2', 'tuko', 'rooster1', 'rooster2', 'rooster3', 'coins1', 'coins2', 'coins3', 'car_close', 'car_close2', 'car_open_rain', 'drawer', 'till', 'soda', 'fryer', 'paper1', 'paper2', 'envelope', 'bag', 'scanner', 'dog1', 'dog2', 'dog3', 'dog4', 'broom', 'wade1', 'wade2', 'wade3', 'wade4', 'wade5', 'umbrella'].map(SFX),
 ];
@@ -50,7 +54,8 @@ export class Audio {
     comp.threshold.value = -14; comp.ratio.value = 3;
     this.master = ctx.createGain(); this.master.gain.value = 0.95;
     this.master.connect(comp).connect(ctx.destination);
-    this.world = ctx.createGain(); this.world.connect(this.master);
+    // world → under → master: `under` only dips while a voice plays, so it never fights duck() or pressure() on world
+    this.world = ctx.createGain(); this.under = ctx.createGain(); this.world.connect(this.under).connect(this.master);
     this.white = this.makeNoise('white');
     this.pink = this.makeNoise('pink');
     this.brown = this.makeNoise('brown');
@@ -230,6 +235,38 @@ export class Audio {
     } else this.layer(name, level);
   }
 
+  // ---------- dialogue ----------
+  /**
+   * Play one recorded line. Only one voice at a time: starting a line stops the last one.
+   * Resolves to { duration, ended, stop(fade) }, or null when there is no sound yet or the clip didn't load within `wait` seconds
+   * (a voice that comes in late would no longer match its subtitle).
+   */
+  async voice(url, { wait = 1.5 } = {}) {
+    if (!this.ctx || !url) return null;
+    this.stopVoice();
+    const b = this.ready.get(url) || await Promise.race([this.buf(url), new Promise(r => setTimeout(() => r(null), wait * 1000))]);
+    if (!b) return null;
+    this.stopVoice(); // another line may have started while this one was decoding
+    const s = this.ctx.createBufferSource(), g = this.gain(1);
+    s.buffer = b; s.connect(g).connect(this.master);
+    let done; const ended = new Promise(r => (done = r));
+    const v = {
+      duration: b.duration, ended, stopped: false,
+      stop: (fade = 0.08) => { // a short fade so cutting a line off doesn't click
+        if (v.stopped) return; v.stopped = true;
+        const t = this.ctx.currentTime;
+        g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(0, t + fade);
+        try { s.stop(t + fade + 0.02); } catch { /* already over */ }
+      },
+    };
+    s.onended = () => { v.stopped = true; if (this._voice === v) { this._voice = null; this.under.gain.setTargetAtTime(1, this.ctx.currentTime, 0.35); } done(); };
+    this._voice = v;
+    this.under.gain.setTargetAtTime(UNDER_VOICE, this.ctx.currentTime, 0.12);
+    s.start();
+    return v;
+  }
+  stopVoice(fade) { this._voice?.stop(fade); }
+
   // ---------- interface: water sounds, on their own context ----------
   /* The game's context is suspended while paused, and the menu still has to answer, so UI sound lives apart from it. */
   _ui() {
@@ -290,6 +327,13 @@ export class Audio {
     if (!played) this.noiseHit(3.4, { f: 160, type: 'lowpass', vol: .7, a: .05, delay, buf: this.brown });
     this.noiseHit(3, { f: 95, type: 'lowpass', vol: near ? .62 : .42, a: .06, delay: delay + .03, buf: this.brown });
     this.layer('rain', .46, null, .5); setTimeout(() => { if (this.place == null) this.layer('rain', .76, null, 3); }, 2200); // rain drops back as the crash takes over
+  }
+  gateThunder() { // the press that opens the menu: the crack lands right on the key, the real roll follows once it is decoded
+    if (!this.ctx) return;
+    this.noiseHit(.4, { f: 2400, q: .45, vol: .3, a: .002 });
+    this.noiseHit(4.2, { f: 120, type: 'lowpass', vol: .7, a: .03, buf: this.brown });
+    this.tone(44, 2.4, { vol: .28, a: .01, to: 30 });
+    this.buf(SFX('thunder1')).then(b => { if (b) this.shot('thunder1', { vol: .82, lp: 9000, room: .3, pan: -.12 }); });
   }
   titleBed(on) {
     if (!this.ctx) return;
@@ -384,7 +428,29 @@ export class Audio {
   knock() { [0, .19, .36].forEach(dl => { this.tone(180, .09, { vol: .5, to: 120, delay: dl }); this.noiseHit(.05, { f: 1400, q: 2, vol: .25, delay: dl }); }); }
   coin() { if (!this.shot(pick(['coins1', 'coins3']), { vol: .5, rate: between(.94, 1.08) })) [0, .07].forEach((dl, i) => [3200, 4700, 6900].forEach(f => this.tone(f * (1 + i * .03), .35, { vol: .05, delay: dl }))); }
   drop() { this.tone(1500, .09, { vol: .18, to: 420 }); this.tone(900, .25, { vol: .05, delay: .06, to: 600 }); }
-  heartbeat() { this.tone(55, .12, { vol: .7, to: 38 }); this.tone(52, .14, { vol: .5, to: 36, delay: .22 }); }
+  heartbeat(k = 1) { // lub-dub. Laptop and classroom speakers can't play the 50 Hz body, so a thump in the 100s and a soft knock carry it
+    [[0, 1], [.21, .7]].forEach(([dl, a]) => {
+      this.tone(56, .17, { vol: .85 * a * k, to: 38, delay: dl });
+      this.tone(124, .12, { vol: .55 * a * k, to: 68, delay: dl });
+      this.noiseHit(.08, { f: 380, q: .8, vol: .5 * a * k, delay: dl, buf: this.brown });
+    });
+  }
+  /** a choice on the clock: the world sinks back so the heartbeat fills the room, then returns to where it was */
+  pressure(on) {
+    if (!this.ctx) return;
+    const g = this.world.gain, t = this.ctx.currentTime;
+    if (on) { if (this._pre == null) this._pre = g.value; g.cancelScheduledValues(t); g.setTargetAtTime(Math.min(this._pre, .32), t, .2); }
+    else if (this._pre != null) { g.cancelScheduledValues(t); g.setTargetAtTime(this._pre, t, .45); this._pre = null; }
+  }
+  /** he helped someone: a bright drop and a warm two-note chime under it */
+  helped() {
+    if (!this.ctx) return;
+    this.drop();
+    this.piano(659.25, 2.6, .1, .05); this.piano(987.77, 3.2, .085, .17);
+    this.tone(1975.5, .9, { vol: .025, delay: .17 });
+  }
+  /** he didn't: one low, dull note */
+  unhelped() { if (this.ctx) { this.tone(98, .7, { vol: .16, to: 90 }); this.piano(146.83, 2.4, .07, .02); } }
   sting() { this.tone(41, 3.2, { vol: .5, a: .02, to: 30 }); this.noiseHit(2.6, { f: 300, type: 'lowpass', vol: .25, a: .4, buf: this.brown }); }
   whoosh() { this.noiseHit(.9, { f: 900, q: .6, vol: .15, a: .35 }); }
   paper() { if (!this.shot(pick(['paper1', 'paper2', 'envelope']), { vol: .42, rate: between(.92, 1.1) })) for (let i = 0; i < 5; i++) this.noiseHit(.04 + Math.random() * .05, { f: 3000 + Math.random() * 3000, q: .8, vol: .06, delay: i * .06 }); }

@@ -100,3 +100,18 @@
 #menu.on #sceneItems button:nth-child(9) { animation-delay: .28s; }
 #menu.on #sceneItems button:nth-child(10) { animation-delay: .31s; }
 #menu.on #menuBack { animation-delay: .36s; }
+
+/* ---------- the gate before the menu: a teaser. The street is held in the dark, the logo is barely there.
+   The press brings thunder, the flash shows the street, and the logo surfaces with it. ---------- */
+#title canvas { transition: filter 1.5s ease .1s, transform 2.6s cubic-bezier(.16, .8, .24, 1); }
+#title.gate canvas { filter: blur(calc(var(--u) * .45)); transform: scale(1.05); }
+#title.gate .logo { opacity: .11; filter: blur(calc(var(--u) * .14)); transform: translateY(calc(var(--u) * .8)) scale(1.015); transition: opacity 3.5s ease .4s, transform 3s ease, filter 2s ease; }
+#title.gate .mirror { opacity: 0; }
+#title .mirror { transition: opacity 2.4s ease .6s; }
+#title.revealing .logo { transition: opacity 1.9s ease .18s, transform 2.4s cubic-bezier(.16, .8, .24, 1) .12s, filter 1.6s ease .15s; }
+#title.gate .press { color: rgba(255, 255, 255, .6); }
+#title.strike canvas, #title.strike .logo { animation: titlestrike .55s cubic-bezier(.3, .7, .4, 1); }
+@keyframes titlestrike {
+  0% { translate: 0 0; } 12% { translate: calc(var(--u) * -.5) calc(var(--u) * .3); } 26% { translate: calc(var(--u) * .45) calc(var(--u) * -.25); }
+  42% { translate: calc(var(--u) * -.25) calc(var(--u) * .15); } 62% { translate: calc(var(--u) * .12) 0; } 100% { translate: 0 0; }
+}

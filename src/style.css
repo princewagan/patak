@@ -47,8 +47,8 @@ body.nobars .bar.bottom { transform: translateY(100%); }
 
 /* big centered lines */
 #bigline { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 7; gap: calc(var(--u) * 1); padding: 0 8vw; }
-#bigline div { font-family: var(--serif); font-weight: 500; font-size: calc(var(--u) * 3.7); line-height: 1.22; opacity: 0; transition: opacity 1.2s ease, filter 1.2s ease; filter: blur(5px); }
-#bigline div.in { opacity: 1; filter: none; }
+#bigline div { font-family: var(--serif); font-weight: 500; font-size: calc(var(--u) * 3.7); line-height: 1.22; opacity: 0; transition: opacity 1.2s ease, filter 1.2s ease; filter: blur(5px); will-change: opacity, filter; font-synthesis: none; }
+#bigline div.in { opacity: 1; filter: blur(0); }
 #bigline div.huge { font-size: calc(var(--u) * 11); font-style: italic; line-height: 1; }
 #bigline div.small { font-family: var(--text); font-size: calc(var(--u) * 2); color: var(--soft); }
 

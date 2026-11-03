@@ -9,13 +9,15 @@ import { animate, moveTo, walkPath } from '../engine/tween.js';
 import { makeStreet, Traffic } from './street.js';
 import { makePhone } from './phone.js';
 import { prewarm } from '../engine/prewarm.js';
+import { povArm } from './labas.js';
 
 const D2R = THREE.MathUtils.degToRad;
 const PI = Math.PI;
+const _w = new THREE.Vector3();
 
 /* Jeep interior coordinates: floor y=0, aisle along Z (front = -Z), benches at x = ±0.66.
    The jeep stays still and the street scrolls past. */
-const W = 0.88, CEIL = 1.45, SEAT = 0.42;
+const W = 0.88, CEIL = 1.45, SEAT = 0.42, RX_UMB = 0.44;
 
 function envelope(text, big = false) {
   const t = canvasTex(big ? 512 : 128, big ? 320 : 80, (c, w, h) => {
@@ -26,6 +28,29 @@ function envelope(text, big = false) {
   });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.1), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, side: THREE.DoubleSide }));
   m.castShadow = true; return m;
+}
+
+/** a crumpled cloth, not a brick */
+function rag(mat) {
+  const g = new THREE.IcosahedronGeometry(0.05, 3), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 1 + 0.22 * Math.sin(x * 60 + y * 41) * Math.cos(z * 53 + x * 23); p.setXYZ(i, x * k * 1.25, y * k * 0.5, z * k); }
+  g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); m.castShadow = true; return m;
+}
+
+/** a woven bayong: tapered, soft-cornered, with two handles */
+function bayong() {
+  const G = new THREE.Group();
+  const weave = canvasTex(128, 128, (c, w, h) => {
+    c.fillStyle = '#9a7a46'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { c.fillStyle = (x + y) % 2 ? '#b08f58' : '#7f6236'; c.fillRect(x * 16 + 1, y * 16 + 1, 14, 14); }
+  });
+  weave.wrapS = weave.wrapT = THREE.RepeatWrapping; weave.repeat.set(3, 1.6);
+  const m = new THREE.MeshStandardMaterial({ map: weave, roughness: 0.95 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.14, 0.24, 28, 1, true), m); body.scale.z = 0.5; body.castShadow = true; G.add(body);
+  const lid = new THREE.Mesh(new THREE.CircleGeometry(0.165, 28), std(0x3a2d1b, { rough: 1 })); lid.rotation.x = -PI / 2; lid.scale.y = 0.5; lid.position.y = 0.105; G.add(lid);
+  const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.14, 28), m); bottom.rotation.x = PI / 2; bottom.scale.y = 0.5; bottom.position.y = -0.12; G.add(bottom);
+  for (const z of [-0.075, 0.075]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.006, 6, 18, PI), std(0x5a4526, { rough: 0.9 })); h.position.set(0, 0.115, z); G.add(h); }
+  return G;
 }
 
 export default {
@@ -46,14 +71,16 @@ export default {
     tubeL[1].castShadow = true; tubeL[1].shadow.mapSize.set(1024, 1024); tubeL[1].shadow.bias = -0.002; tubeL[1].shadow.radius = 4;
     this.tubeL = tubeL;
     // low along the aisle, so the boy at everyone's feet can actually be seen; it dims with the tubes for his silhouette
-    this.aisle = [[0, 0.75, 1.5], [0, 0.75, -0.4]].map(([x, y, z]) => { const l = new THREE.PointLight(0xd6e4f5, 1.5, 4.2, 1.5); l.position.set(x, y, z); S.add(l); return l; });
+    this.aisle = [[0, 1.34, 1.5], [0, 1.34, -0.4]].map(([x, y, z]) => { const l = new THREE.PointLight(0xd6e4f5, 2.2, 5, 1.4); l.position.set(x, y, z); S.add(l); return l; });
+    // down at floor level with the boy, or nobody could see what his hands are doing
+    this.low = new THREE.PointLight(0xdfeaff, 0, 2.6, 1.4); this.low.position.set(0, 0.5, 1.3); S.add(this.low);
     // passing street lamps (sweep through the windows)
     this.sweep = [new THREE.PointLight(0xffa04a, 0, 7, 1.6), new THREE.PointLight(0xfff0d0, 0, 7, 1.6)];
     this.sweep[0].position.set(2.6, 2.4, -8); this.sweep[1].position.set(-3.2, 0.6, -8); S.add(...this.sweep);
 
     // ---------- jeep body ----------
     const J = this.jeep = new THREE.Group(); S.add(J);
-    const floorM = pbr('metal_plate', { repeat: [1.5, 4], metal: 0.6, rough: 0.8, color: 0x8a8d90 });
+    const floorM = pbr('metal_plate', { repeat: [1.5, 4], metal: 0.15, rough: 0.85, color: 0xa4a7aa });
     const paint = pbr('metal_plate', { repeat: [2, 1], color: 0xb4b9be, rough: 0.55, metal: 0.85, noDiff: true, normalScale: 0.5 });
     const chrome = new THREE.MeshStandardMaterial({ color: 0xd8dde2, metalness: 1, roughness: 0.22 });
     const vinyl = pbr('leather_red_03', { repeat: [3, 1], color: 0x7a1d1c, rough: 0.55, noDiff: true, env: 1.5 });
@@ -112,53 +139,67 @@ export default {
     this.people = [driver];
 
     // ---------- passengers ----------
-    const P = (o, x, z, pose, extra) => {
-      const p = new Person(o); p.pose(pose, true); if (extra) p.set(extra, true);
+    // Everyone sits the way people sit on a jeepney: back on the rail, feet flat, hands on their own thighs or their own things.
+    const P = (o, x, z, extra) => {
+      const p = new Person(o); p.pose('sit', true); if (extra) p.set(extra, true);
       p.root.position.set(x, 0, z); p.root.rotation.y = x < 0 ? PI / 2 : -PI / 2; J.add(p.root); this.people.push(p); return p;
     };
     const LX = -0.73, RX = 0.73;
-    this.l1 = P({ real: 'driver', h: 1.7, skin: 'brown', top: 0x3b4a3a, bottom: 0x22262b, hair: 'short', build: 1.05, longSleeve: true }, LX, 1.45, 'sitSlump', { neck: [32, 0, 14] });
-    this.l2 = P({ real: 'commuter', h: 1.58, skin: 'light', top: 0xa9a59c, bottom: 0x2b3448, hair: 'long', build: 0.9 }, LX, 0.78, 'sit', { neck: [30, 0, 0], shL: [-26, 0, 10], elL: [-100, 10, 0], shR: [-22, 0, -10], elR: [-96, -10, 0] });
-    this.l3 = P({ real: 'mark', h: 1.7, skin: 'dark', top: 0x7b6a52, bottom: 0x3a3a36, hair: 'short', cap: 0x2a3550, build: 1.15 }, LX, 0.1, 'sit', { shL: [-28, 0, 22], shR: [-28, 0, -22], elL: [-105, 0, -40], elR: [-105, 0, 40], neck: [10, 0, 0] });
-    this.l4 = P({ h: 1.62, skin: 'tan', top: 0x5a4d6b, bottom: 0x2c2c30, hair: 'short', hairColor: 0x5c5853, build: 1.0 }, LX, -0.57, 'sitSlump', { neck: [24, 0, -10] });
-    this.l5 = P({ h: 1.55, skin: 'tan', top: 0x9c3b4a, bottom: 0x1f2329, hair: 'bun', build: 1.05 }, LX, -1.24, 'sit', { neck: [-4, -30, 0] });
-    this.ale = P({ real: 'tindera', h: 1.55, skin: 'tan', top: 0x6b3550, bottom: 0x2a2627, hair: 'bun', hairColor: 0x2a2421, build: 1.15, belly: true }, RX, 0.6, 'sit', { neck: [6, 0, 0], shL: [-34, 0, 8], elL: [-60, 0, 0], shR: [-34, 0, -8], elR: [-60, 0, 0] });
-    this.r3 = P({ h: 1.72, skin: 'tan', top: 0x202326, bottom: 0x2b3448, hair: 'messy', build: 0.95 }, RX, -0.1, 'sit', { neck: [18, 0, 0] });
-    this.r4 = P({ h: 1.58, skin: 'light', top: 0x4f6f7f, bottom: 0x2a2a2a, hair: 'long', build: 1 }, RX, -0.78, 'sitSlump', { neck: [30, 0, 18] });
-    this.r5 = P({ h: 1.68, skin: 'brown', top: 0x8a8070, bottom: 0x2d2a25, hair: 'short', build: 1.1 }, RX, -1.45, 'sit', {});
-    // phone glow on l2's face
-    const ph = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.14, 0.01), glow(0xbfd6ff, 1.4)); ph.position.set(0, -0.06, 0.03); ph.rotation.x = -0.6; this.l2.arm.L.wr.add(ph);
-    const phl = new THREE.PointLight(0xa8c4ff, 0.08, 0.8, 2); phl.position.set(0, 0.05, 0.08); this.l2.arm.L.wr.add(phl);
-    // ale's bayong bag + umbrella
-    const bay = box(0.32, 0.26, 0.16, std(0x9a7a46, { rough: 1 })); bay.position.set(0, 0.6, 0.27); this.ale.root.add(bay);
-    const umb = cyl(0.03, 0.012, 0.8, std(0x1c2a3c, { rough: 0.3 })); umb.position.set(0.22, 0.4, 0.33); umb.rotation.z = 0.2; this.ale.root.add(umb);
+    this.l1 = P({ real: 'driver', h: 1.7, build: 1.05 }, LX, 1.45, { neck: [14, 0, 6] });
+    this.l2 = P({ real: 'commuter', h: 1.58, build: 0.9 }, LX, 0.78, { neck: [26, 0, 0] });
+    this.l3 = P({ real: 'mark', h: 1.7, build: 1.15 }, LX, 0.1, { neck: [4, 0, 0] });
+    this.l4 = P({ real: 'lola', h: 1.52, build: 1.0 }, LX, -0.57, { neck: [12, 0, -8] });
+    this.l5 = P({ real: 'joy', h: 1.56, build: 1.05 }, LX, -1.24, { neck: [-2, -28, 0] });
+    this.ale = P({ real: 'tindera', h: 1.55, build: 1.15, belly: true }, RX, 0.6, { neck: [6, 0, 0] });
+    this.r3 = P({ real: 'prince', h: 1.72, build: 0.95 }, RX, -0.1, { neck: [10, 0, 0] });
+    this.r4 = P({ real: 'keira', h: 1.58, build: 1 }, RX, -0.78, { neck: [16, 0, 10] });
+    this.r5 = P({ real: 'driver', h: 1.68, build: 1.1 }, RX, -1.45, { neck: [2, 0, 0] });
+    this.seated = [this.l1, this.l2, this.l3, this.l4, this.l5, this.ale, this.r3, this.r4, this.r5];
+
+    // l2's phone: it is held up in front of her, both hands on it
+    const hp = this.hp = new THREE.Group();
+    const hb = box(0.072, 0.15, 0.009, std(0x15171b, { rough: 0.3, metal: 0.4 }), 0.004); hp.add(hb);
+    const hs = new THREE.Mesh(new THREE.PlaneGeometry(0.064, 0.138), glow(0xbfd6ff, 1.3)); hs.position.z = 0.0052; hp.add(hs);
+    this.l2.root.add(hp);
+    this.hpL = new THREE.Object3D(); this.hpL.position.set(-0.05, -0.09, -0.025); hp.add(this.hpL);
+    this.hpR = new THREE.Object3D(); this.hpR.position.set(0.05, -0.09, -0.025); hp.add(this.hpR);
+    const phl = new THREE.PointLight(0xa8c4ff, 0.1, 0.8, 2); phl.position.set(0, 0, 0.1); hp.add(phl);
+    // ale's bayong on her lap, her umbrella leaning on her shin
+    this.bay = bayong(); this.bay.scale.setScalar(0.74); this.ale.root.add(this.bay);
+    const umb = this.umb = new THREE.Group(), um = std(0x1c2a3c, { rough: 0.45 });
+    umb.add(at(cyl(0.024, 0.012, 0.56, um, 10), 0, 0.31, 0));
+    umb.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.006, 6, 12, PI), std(0x3b2a1e, { rough: 0.5 })), 0.02, 0.6, 0, 0, 0, 0));
+    J.add(umb);
 
     // ---------- you ----------
-    const you = this.you = new Person({ h: 1.7, skin: 'tan', top: 0x5d6670, bottomMat: pbr('denim_fabric', { repeat: [2, 2], color: 0x5a6c8a }), hair: 'short', build: 1 });
-    you.pose('sit', true).set({ shL: [-30, 0, 12], elL: [-70, 0, 0], shR: [-26, 0, -12], elR: [-74, 0, 0] }, true);
+    const you = this.you = new Person({ real: 'driver', h: 1.7, build: 1 });
+    you.pose('sit', true).set({ hpL: [-80, 0, 13], hpR: [-80, 0, -13], knL: [62, 0, 0], knR: [62, 0, 0], shL: [-20, 0, 8], shR: [-20, 0, -8], elL: [-60, 0, 0], elR: [-60, 0, 0] }, true);
     you.root.position.set(RX, 0, 1.3); you.root.rotation.y = -PI / 2; J.add(you.root);
-    you.head.visible = false; you.arm.L.sh.visible = false; you.arm.R.sh.visible = false;
+    you.head.visible = false; you.arm.L.sh.visible = false; you.arm.R.sh.visible = false; you.real?.hideHead();
     this.people.push(you);
     // your phone, in your right hand
     this.held = new THREE.Group(); S.add(this.held);
     const phone = this.phone = makePhone(S);
     phone.position.copy(this.PH_LAP); phone.quaternion.copy(this.phoneQ(this.PH_LAP)); phone.visible = false; S.add(phone);
-    // envelopes on laps
-    this.laps = [];
-    for (const p of [this.l1, this.l2, this.l3, this.l4, this.l5, this.ale, this.r3, this.r4, this.r5]) {
-      const e = envelope(false); e.rotation.x = -PI / 2; e.position.set(0, 0.5, 0.25); e.visible = false; p.root.add(e); this.laps.push(e);
-    }
-    this.myEnv = envelope(true); this.myEnv.material.color.setScalar(0.4); /* keeps the writing readable under the aisle light */ this.myEnv.rotation.set(-PI / 2 + 0.35, 0, PI); this.myEnv.position.set(0, 0.52, 0.27); this.myEnv.visible = false; you.root.add(this.myEnv);
+    // your own arm, for the one thing you do in this scene
+    this.arm = povArm(); S.add(this.arm);
+    // envelopes: they live in the jeep, not on anybody, so they stay exactly where they were put
+    this.laps = this.seated.map(() => { const e = envelope(false); e.visible = false; J.add(e); return e; });
+    this.myEnv = envelope(true); this.myEnv.material.color.setScalar(0.4); /* keeps the writing readable under the aisle light */ this.myEnv.visible = false; J.add(this.myEnv);
     this.coin = pesoCoin(20);
-    this.coin.visible = false; this.held.add(this.coin); this.coin.position.set(0.02, -0.16, -0.3); this.coin.rotation.set(1.2, 0, 0.3);
+    this.coin.visible = false; J.add(this.coin);
 
     // ---------- the boy ----------
     const boy = this.boy = new Person({ real: 'boy', h: 1.24, skin: 'brown', top: 0x7d786c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
     boy.root.position.set(0.1, -0.8, 4.2); J.add(boy.root); this.people.push(boy);
-    const rag = box(0.12, 0.02, 0.09, std(0x6d6a63, { rough: 1 })); rag.position.set(0, -0.09, 0.02); boy.arm.R.wr.add(rag);
-    const stack = box(0.1, 0.03, 0.16, std(0xe8e2d2, { rough: 0.9 })); stack.position.set(0, -0.08, 0.03); stack.rotation.x = -0.3; boy.arm.L.wr.add(stack); this.stack = stack;
+    const rg = rag(std(0x6d6a63, { rough: 1 })); rg.position.set(0, -0.085, 0.015); boy.arm.R.wr.add(rg); this.rag = rg;
+    // the envelopes he's carrying: a real little pile, gripped upright in the left hand, thinner as he deals them out
+    const stack = this.stack = new THREE.Group(); stack.position.set(-0.012, -0.08, 0.03);
+    const pileM = std(0xa8a294, { rough: 0.95 });
+    this.pile = Array.from({ length: 12 }, (_, i) => { const e = box(0.0016, 0.16, 0.1, pileM); e.position.x = -i * 0.0019; e.rotation.x = (i - 6) * 0.012; e.castShadow = true; stack.add(e); return e; });
+    boy.arm.L.wr.add(stack);
     const wetHair = boy.hair.children[0]; if (wetHair) wetHair.material = wetHair.material.clone(), wetHair.material.roughness = 0.25;
-    this.extraKids = [0x6d5a4a, 0x2e4a6b].map((c, i) => { const k = new Person({ h: 1.18 + i * 0.06, skin: 'brown', top: c, bottom: 0x24272b, hair: 'messy', shorts: true, barefoot: true, build: 0.8 }); k.root.position.set(1.6 + i * 0.4, -0.8, 3.5 + i); k.root.visible = false; S.add(k.root); this.people.push(k); return k; });
+    this.extraKids = [0x6d5a4a, 0x2e4a6b].map((c, i) => { const k = new Person({ real: 'boy', h: 1.18 + i * 0.06, skin: 'brown', top: c, bottom: 0x24272b, hair: 'messy', shorts: true, barefoot: true, build: 0.8 }); k.root.position.set(1.6 + i * 0.4, -0.8, 3.5 + i); k.root.visible = false; S.add(k.root); this.people.push(k); return k; });
 
     // ---------- outside ----------
     this.street = makeStreet({ L: 88, ground: -0.8, roadX: -4.6, laneW: 6.2, seed: 11, night: 0.45 }); S.add(this.street);
@@ -166,10 +207,9 @@ export default {
     this.oncoming2 = new Traffic({ x: -9.6, y: -0.8, count: 4, L: 140, dir: 1 }); S.add(this.oncoming2.group);
     const follow = new THREE.Group(); // tricycle behind us, headlight glaring in
     const hl = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), glow(0xfff2d8, 6)); hl.position.y = 0.2; follow.add(hl);
-    const hlL = new THREE.PointLight(0xfff0d8, 1.4, 9, 2); hlL.position.set(0, 0.2, -0.3); follow.add(hlL);
+    const hlL = new THREE.PointLight(0xfff0d8, 0.5, 9, 2); hlL.position.set(0, 0.2, -0.3); follow.add(hlL);
     for (const x of [-0.45, 0.45]) { const hb = beam(0xfff1dc, { radius: 1.1, length: 9, intensity: 0.09, top: 0.08 }); hb.rotation.x = -PI / 2; hb.position.set(x, 0.2, -0.1); follow.add(hb); this.beams.push(hb); const hh = halo(0xfff0d8, 1.1, 1.0); hh.position.set(x, 0.2, -0.15); follow.add(hh); }
-    follow.add(at(box(1.1, 1.2, 1.8, std(0x15161a, { rough: 0.4, metal: 0.4 }), 0.12), 0, 0.15, 1.0));
-    follow.position.set(0.4, -0.3, 12.5); S.add(follow); this.follow = follow;
+    follow.position.set(0.4, -0.3, 12.5); S.add(follow); this.tail = follow;
     this.rim = new THREE.PointLight(0xcfe0ff, 0, 2.2, 2); this.rim.position.set(0.0, 0.95, 2.25); S.add(this.rim);
     this.rain = new Rain({ count: 12000, size: [26, 14, 30], speed: 10, opacity: 0.28, wind: [0.4, 1.2] }).exclude([-W - 0.05, -0.1, -3.6], [W + 0.05, CEIL + 0.1, 2.2]);
     S.add(this.rain.mesh);
@@ -186,6 +226,7 @@ export default {
     engine.rig.shake = 0.7; engine.rig.jolt = 1; engine.rig.pov = 1;
     engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.2], fov: 50 });
     audio.rain(0.8, 0.35); audio.roof(0.7); audio.engine(1, 1); audio.traffic(0.6); audio.scape('jeep');
+    this.settle();
     prewarm(engine);
   },
   exit() { audio.layer('roof', 0); audio.layer('engine', 0); audio.layer('traffic', 0); audio.scape(null); },
@@ -195,7 +236,7 @@ export default {
     this.offset += this.speed * dt;
     const L = this.street.userData.L; this.street.position.z = this.offset % L;
     this.oncoming.update(dt, this.speed); this.oncoming2.update(dt, this.speed);
-    this.follow.position.y = -0.3 + Math.sin(t * 9) * 0.01;
+    this.tail.position.y = -0.3 + Math.sin(t * 9) * 0.01;
     this.engine.rig.jolt = 0.25 + this.speed / 7 * 0.9;
     // street-lamp light sweeps through the windows (pole spacing 22 m)
     const ph = (this.offset % 22) / 22;
@@ -204,13 +245,17 @@ export default {
     this.sweep[1].position.z = -9 + ph2 * 18; this.sweep[1].intensity = this.speed > 0.5 ? 4 * Math.sin(ph2 * PI) : 0;
     // fluorescent flicker
     const fl = Math.random() < 0.012 ? 0.4 : 1; this.tubeL.forEach(l => { const d = l.userData.dim ?? 1; l.userData.k = (l.userData.k ?? 1) + (d - (l.userData.k ?? 1)) * 0.05; l.intensity = 1.1 * fl * l.userData.k; });
-    this.aisle.forEach(l => { l.intensity = 1.5 * (this.tubeL[0].userData.k ?? 1); });
+    this.aisle.forEach(l => { l.intensity = 2.2 * (this.tubeL[0].userData.k ?? 1); });
     this.rain.update(t, this.engine.camera);
     this.beams.forEach(b => b.userData.tick(t));
     const dp = this.drips.geometry.attributes.position;
     for (let i = 0; i < dp.count; i++) { const k = (t * (0.9 + this.dripSeed[i]) + this.dripSeed[i] * 7) % 1; dp.setY(i, 1.3 - k * k * 1.6); dp.setZ(i, dp.getZ(i) + this.speed * dt * 0.02 * (dp.getZ(i) > 2.1 ? -200 : 1)); }
     dp.needsUpdate = true;
     for (const p of this.people) p.update(dt, t);
+    // the head keeps following the boy down the aisle
+    if (this.watch) { const w = this.watch, r = this.engine.rig; r.look.lerp(_w.copy(w.who.root.position).setY(w.y).add(this.jeep.position), 1 - Math.exp(-w.k * dt)); }
+    // a little light goes with him at floor level
+    this.low.position.set(this.boy.root.position.x + (this.lowX ?? 0.25), this.lowY ?? 1.2, this.boy.root.position.z - 0.15); this.low.intensity += ((this.lowTo ?? 0) * 0.85 - this.low.intensity) * (1 - Math.exp(-3 * dt));
     this.held.position.copy(this.engine.camera.position); this.held.quaternion.copy(this.engine.camera.quaternion);
     this.phone.update(dt, t, this.engine.rig.road);
     // light sway of everyone with the jeep
@@ -266,13 +311,122 @@ export default {
   },
 
   /* ================= the chapter ================= */
-  cam(pos, look, dur = 2.5, fov, e) { return this.engine.rig.move({ pos, look, dur, fov, e }); },
-  resetBoy() {
-    const boy = this.boy; this.silhouette(1); boy.anim = null; boy.look(null); boy.expression({}); boy.pose('stand', true);
-    boy.root.position.set(0.1, -0.8, 4.2); boy.root.rotation.y = PI;
-    this.laps.forEach(e => (e.visible = false)); this.myEnv.visible = false;
+  cam(pos, look, dur = 2.5, fov, e) { this.watch = null; return this.engine.rig.move({ pos, look, dur, fov, e }); },
+
+  /** the head keeps turning to follow someone until told otherwise */
+  follow(who, y = 0.75, k = 2.6) { this.watch = { who, y, k }; },
+
+  /** everything about a seated person that depends on the body they actually have: lap, hands, feet */
+  seat(p, i) {
+    const R = p.real, w = (o, v = new THREE.Vector3()) => { o.updateWorldMatrix(true, false); return v.setFromMatrixPosition(o.matrixWorld); };
+    p.update(1, 0); p.update(1, 0);
+    const J = this.jeep, s = p.H / 1.7, f = new THREE.Vector3(Math.sign(-p.root.position.x), 0, 0);
+    const hipL = w(R.thigh.L), hipR = w(R.thigh.R), kneL = w(R.calf.L), kneR = w(R.calf.R), footL = w(R.foot.L), footR = w(R.foot.R);
+    const onThigh = (h, n, k, up) => h.clone().lerp(n, k).add(new THREE.Vector3(0, up * s, 0));
+    p.spot = {
+      lap: onThigh(hipL, kneL, 0.6, 0.095).lerp(onThigh(hipR, kneR, 0.6, 0.095), 0.5),
+      handL: onThigh(hipL, kneL, 0.72, 0.13), handR: onThigh(hipR, kneR, 0.72, 0.13),
+      shoeL: footL.clone().addScaledVector(f, 0.1 * s).setY(0.075), shoeR: footR.clone().addScaledVector(f, 0.1 * s).setY(0.075),
+      f,
+    };
+    p.spot.lapJ = J.worldToLocal(p.spot.lap.clone());
+    return p.spot;
   },
-  wipeAnim(p, rate = 9) { p.anim = (t, q) => { q.arm.R.sh.rotation.x = -1.15 + Math.sin(t * rate) * 0.25; q.arm.R.el.rotation.x = -0.55 + Math.sin(t * rate + 1) * 0.3; }; },
+  /** envelopes lie flat on the thighs, top edge away from whoever is sitting there */
+  layFlat(e, p, yaw = 0) {
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (p.root.position.x < 0 ? -PI / 2 : PI / 2) + yaw).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -PI / 2));
+    e.quaternion.copy(q); e.position.copy(p.spot.lapJ);
+    return q;
+  },
+
+  /** set up everybody's hands once the bodies exist */
+  settle() {
+    if (this.settled) return; this.settled = true;
+    this.seated.forEach((p, i) => {
+      const s = this.seat(p, i);
+      if (p === this.l2) return;
+      if (p === this.ale) return;
+      p.reach('L', s.handL, { rate: 30, wrist: [-14, 0, 0] }); p.reach('R', s.handR, { rate: 30, wrist: [-14, 0, 0] });
+    });
+    this.seat(this.you);
+    const l2 = this.l2, hp = this.hp; hp.position.set(0, 0.8, 0.26); hp.rotation.set(0.7, PI, 0);
+    l2.reach('L', this.hpL, { rate: 30, pole: [1, -1, -0.4], wrist: [0, 0, 0] }); l2.reach('R', this.hpR, { rate: 30, pole: [-1, -1, -0.4], wrist: [0, 0, 0] });
+    const ale = this.ale, sa = ale.spot, bagPos = ale.root.worldToLocal(sa.lap.clone()); bagPos.y += 0.085; bagPos.z += 0.02; this.bay.position.copy(bagPos);
+    this.laps.forEach((e, i) => this.layFlat(e, this.seated[i], [0.12, -0.2, 0.3, -0.1, 0.16, 0, -0.24, 0.1, -0.08][i]));
+    // ale's envelope lies on top of her bag, her hands either side of it
+    { const y = bagPos.clone(); y.y += 0.086; y.z += 0.0; ale.root.localToWorld(y); this.jeep.worldToLocal(y); this.laps[5].position.copy(y); sa.lapJ = y; }
+    const bw = ale.root.localToWorld(bagPos.clone());
+    ale.reach('L', new THREE.Vector3(bw.x + 0.0, bw.y + 0.1, bw.z - 0.13), { rate: 30, wrist: [-10, 0, 0] }); ale.reach('R', new THREE.Vector3(bw.x + 0.0, bw.y + 0.1, bw.z + 0.13), { rate: 30, wrist: [-10, 0, 0] });
+    this.umb.position.set(RX_UMB, 0, 0.77); this.umb.rotation.set(0.08, 0, 0.16);
+    for (let i = 0; i < 8; i++) this.seated.forEach(p => p.update(0.05, 0));
+    // your own envelope, readable from where you sit
+    this.layFlat(this.myEnv, this.you); this.myEnvQ = this.myEnv.quaternion.clone();
+    this.myEnv.rotateX(0.2); this.myEnv.position.y += 0.018;
+    this.myEnvQ.copy(this.myEnv.quaternion); this.myEnvP = this.myEnv.position.clone();
+  },
+
+  /** the pile in his hand gets thinner and thicker with what's in it */
+  pileCount(n) { this.pile.forEach((e, i) => (e.visible = i < n)); this.pileN = n; },
+
+  /** one envelope travels between the pile and a lap, in his hand the whole way */
+  async pass(e, toLap, dur = 0.55) {
+    const J = this.jeep, boy = this.boy, stack = this.stack, end = e.position.clone(), endQ = e.quaternion.clone(), q0 = new THREE.Quaternion(), w = new THREE.Vector3(), lift = new THREE.Vector3();
+    const from = () => { stack.getWorldPosition(w); return J.worldToLocal(w); };
+    const q = new THREE.Quaternion();
+    if (toLap) this.pileCount(Math.max(1, this.pileN - 1));
+    e.visible = true;
+    q0.copy(J.quaternion).invert(); stack.getWorldQuaternion(q); q0.multiply(q);
+    await animate(k => {
+      const a = toLap ? k : 1 - k;
+      e.position.copy(from()).lerp(end, a); e.position.y += Math.sin(a * PI) * 0.05;
+      e.quaternion.slerpQuaternions(q0, endQ, a);
+    }, dur, 'inOut');
+    if (!toLap) { e.visible = false; e.position.copy(end); e.quaternion.copy(endQ); this.pileCount(Math.min(12, this.pileN + 1)); }
+    audio.paper();
+  },
+
+  /** he works the rag over the toe of each shoe in turn: the hand is on the shoe the whole time */
+  async wipe(p, dur = 2, farFirst = false) {
+    const boy = this.boy, s = p.spot, t = new THREE.Vector3(), back = s.f.clone(), side = new THREE.Vector3(-s.f.z, 0, s.f.x);
+    const a = farFirst ? s.shoeR : s.shoeL, b = farFirst ? s.shoeL : s.shoeR;
+    boy.reach('R', t, { rate: 11, pole: [-1, -0.6, -0.5] });
+    const dt0 = this.engine.time;
+    await animate((_, raw) => {
+      const m = THREE.MathUtils.smoothstep(raw, 0.44, 0.56), now = this.engine.time - dt0;
+      t.copy(a).lerp(b, m).addScaledVector(back, 0.075 + Math.sin(now * 5.5) * 0.02).addScaledVector(side, Math.sin(now * 13) * 0.042);
+      t.y = 0.135 + Math.abs(Math.sin(now * 13)) * 0.012;
+    }, dur, 'linear');
+    boy.reach('R', null, { rate: 8 });
+  },
+
+  /** the same two things at every seat: he leaves the envelope, then he wipes the shoes */
+  async serve(p, e, { walk = 1.15, wipe = 1.8, stayDown = false } = {}) {
+    const boy = this.boy, left = p.root.position.x < 0, s = p.spot;
+    await walkPath(boy, [[left ? 0.03 : -0.03, 0, p.root.position.z + 0.02]], walk);
+    boy.turnTo = left ? -PI / 2 : PI / 2; boy.look(s.lap, 0.8);
+    boy.set({ spine: [30, 0, 0], neck: [6, 0, 0] });
+    await this.dwell(0.18);
+    const hand = s.lap.clone().add(new THREE.Vector3(left ? 0.06 : -0.06, 0.085, 0));
+    boy.reach('L', hand, { rate: 9, pole: [1, -0.4, -0.6] });
+    await this.dwell(0.2);
+    await this.pass(e, true, 0.5);
+    boy.reach('L', null, { rate: 7 });
+    boy.pose('kneelDown'); boy.look(s.shoeL, 0.7);
+    await this.dwell(0.32);
+    await this.wipe(p, wipe);
+    if (!stayDown) { boy.pose('stand'); boy.look(null); await this.dwell(0.28); boy.turnTo = null; }
+  },
+  dwell(s) { return new Promise(r => { let t = 0; const stop = this.engine.onUpdate((dt, _, raw) => { t += raw; if (t >= s) { stop(); r(); } }); }); },
+
+  resetBoy() {
+    const boy = this.boy; this.silhouette(1); boy.anim = null; boy.look(null); boy.expression({}); boy.pose('stand', true); this.watch = null; this.lowTo = 0;
+    boy.reach('L', null); boy.reach('R', null); if (boy.ik) { boy.ik.L && (boy.ik.L.w = 0); boy.ik.R && (boy.ik.R.w = 0); }
+    boy.root.position.set(0.1, -0.8, 4.2); boy.root.rotation.y = PI; boy.turnTo = null;
+    this.laps.forEach(e => (e.visible = false)); this.myEnv.visible = false; this.pileCount(11); this.rag.removeFromParent(); boy.arm.R.wr.add(this.rag); this.rag.position.set(0, -0.085, 0.015); this.rag.rotation.set(0, 0, 0);
+    this.myEnv.position.copy(this.myEnvP); this.myEnv.quaternion.copy(this.myEnvQ);
+    this.laps.forEach((e, i) => this.layFlat(e, this.seated[i], [0.12, -0.2, 0.3, -0.1, 0.16, 0, -0.24, 0.1, -0.08][i]));
+    { const a = this.ale.spot; this.laps[5].position.copy(a.lapJ); }
+  },
 
   /** boy climbs in at the back */
   async board(D) {
@@ -286,38 +440,72 @@ export default {
     await walkPath(boy, [[0.0, 0.0, 1.85]], 1.0);
     this.targetSpeed = 6; audio.engine(1, 1);
   },
-  /** he wipes your shoes and leaves the envelope on your lap */
+
+  /** he leaves the envelope on your lap, then wipes your shoes */
   async atYourFeet(D, line = true) {
-    const boy = this.boy;
-    boy.root.position.set(0.02, 0, 1.3); boy.root.rotation.y = PI / 2; boy.pose('crouch', true); boy.look(null);
-    boy.set({ neck: [30, 0, 0] }); this.wipeAnim(boy, 8);
-    this.engine.dof({ focus: 1.0, aperture: 0.004 });
-    await this.cam([0.64, 1.12, 1.3], [0.12, 0.05, 1.32], 2.4, 46);
-    if (line) await D.say('', 'Pinunasan niya ang sapatos mo.'); else await D.wait(2.2);
-    boy.anim = null; boy.set({ shL: [-80, 0, 0], elL: [-10, 0, 0], neck: [10, 0, 0] });
-    await D.wait(0.7);
-    this.myEnv.visible = true; audio.paper();
-    boy.set({ shL: [-50, 0, 10], elL: [-30, 0, 0] });
-    this.engine.dof({ focus: 0.75, aperture: 0.004 });
-    this.cam([0.64, 1.12, 1.3], [0.38, 0.5, 1.29], 2.0, 34);
-    await moveTo(boy.root, [0, 0, -0.6], 2.2);
-    boy.pose('stand'); boy.root.position.set(0, 0, -1.9);
+    const boy = this.boy, you = this.you, s = you.spot, E = this.engine;
+    await walkPath(boy, [[-0.02, 0, 1.32]], 1.1);
+    boy.turnTo = PI / 2; boy.look(s.lap, 0.8); boy.set({ spine: [30, 0, 0], neck: [6, 0, 0] });
+    E.dof({ focus: 0.72, aperture: 0.004 });
+    this.cam([0.64, 1.12, 1.3], this.lapLook(), 1.3, 40);
+    await this.dwell(0.5);
+    boy.reach('L', s.lap.clone().add(new THREE.Vector3(-0.08, 0.09, 0)), { rate: 8, pole: [1, -0.4, -0.6] });
+    await this.dwell(0.35);
+    await this.pass(this.myEnv, true, 0.7);
+    boy.reach('L', null, { rate: 7 });
+    await this.dwell(0.6);
+    await this.yourShoes(D, line);
   },
-  /** he comes back down the aisle collecting, then stands at your knees, backlit by the rear opening */
+  /** where your eyes go to read what's in your lap */
+  lapLook() { return this.you.spot.lapJ.clone().add(new THREE.Vector3(-0.02, 0, 0)).toArray(); },
+  /** from your seat your own knees hide your feet, so we drop to the floor beside the shoe: rag, hand, shoe, his face behind them */
+  async yourShoes(D, line = true) {
+    const boy = this.boy, you = this.you, s = you.spot, E = this.engine, rig = E.rig;
+    this.cam([0.56, 1.06, 1.3], [0.2, 0.1, 1.3], 1.0, 44);
+    const shoe = s.shoeR.clone(), far = s.shoeL.clone();
+    await walkPath(boy, [[shoe.x - 0.36, 0, (shoe.z + far.z) / 2 + 0.04]], 0.8);
+    boy.turnTo = PI / 2;
+    boy.pose('kneelDown'); boy.look(shoe, 0.7);
+    this.lowTo = 1.6; this.lowX = 0.2; this.lowY = 0.5;
+    await this.dwell(0.7);
+    const pov = rig.pov, sh = rig.shake, side = Math.sign(shoe.z - far.z) || 1;
+    rig.pov = 0; rig.shake = 0.25;
+    rig.set({ pos: [shoe.x - 0.2, 0.3, shoe.z + side * 0.5], look: [shoe.x - 0.14, 0.2, (shoe.z + far.z) / 2], fov: 44 });
+    rig.move({ pos: [shoe.x - 0.16, 0.27, shoe.z + side * 0.44], look: [shoe.x - 0.14, 0.19, (shoe.z + far.z) / 2], fov: 42, dur: 4, e: 'sine' });
+    E.dof({ focus: 0.5, aperture: 0.0014, maxblur: 0.005 });
+    const w = this.wipe(you, 3.6, true);
+    if (line) await D.say('', 'Pinunasan niya ang sapatos mo.', { hold: 2.8 });
+    await w;
+    boy.pose('stand'); boy.look(null); boy.turnTo = null;
+    this.rag.removeFromParent(); boy.chest.add(this.rag); this.rag.position.set(-0.09 * boy.s, 0.13, -0.02); this.rag.rotation.set(0.3, 0, -0.5);   // over his shoulder
+    rig.pov = pov; rig.shake = sh; E.dof({ focus: 0.72, aperture: 0.004 });
+    rig.set({ pos: [0.64, 1.12, 1.3], look: this.lapLook(), fov: 40 });
+    await this.dwell(0.2);
+    this.lowTo = 0; this.lowX = 0.25; this.lowY = 1.2;
+  },
+
+  /** he comes back down the aisle collecting, every envelope back into his hand, and stops at your knees */
   async collect(D) {
-    const boy = this.boy;
-    boy.root.rotation.y = 0; boy.pose('stand');
-    this.engine.dof({ target: boy.head, aperture: 0.003 });
-    this.cam([0.66, 1.13, 1.3], [-0.2, 0.9, -0.2], 2, 46);
-    for (const [i, z] of [[4, -1.25], [8, -1.45], [3, -0.57], [7, -0.78], [2, 0.1], [5, 0.6], [1, 0.78]]) {
-      await walkPath(boy, [[0, 0, z]], 1.5);
-      boy.set({ shL: [-60, 0, 0], spine: [20, 0, 0] }); await D.wait(0.22); this.laps[i].visible = false; audio.paper(); boy.set({ shL: [-10, 0, 0], spine: [0, 0, 0] }); await D.wait(0.08);
+    const boy = this.boy, E = this.engine;
+    E.dof({ target: boy.head, aperture: 0.003 });
+    this.follow(boy, 0.85);
+    for (const i of [8, 4, 7, 3, 6, 2, 5, 1, 0]) {
+      const p = this.seated[i], left = i < 5, e = this.laps[i], s = p.spot;
+      await walkPath(boy, [[left ? 0.03 : -0.03, 0, p.root.position.z + 0.04]], 1.25);
+      boy.turnTo = left ? -PI / 2 : PI / 2; boy.set({ spine: [30, 0, 0] });
+      const lap = e.position.clone(); this.jeep.localToWorld(lap);
+      boy.reach('L', lap.clone().add(new THREE.Vector3(left ? 0.06 : -0.06, 0.085, 0)), { rate: 11, pole: [1, -0.4, -0.6] });
+      await this.dwell(0.28);
+      await this.pass(e, false, 0.3);
+      boy.reach('L', null, { rate: 9 }); boy.set({ spine: [0, 0, 0] });
+      await this.dwell(0.1);
+      boy.turnTo = null;
     }
-    await walkPath(boy, [[0.0, 0, 1.25], [0.05, 0, 1.78]], 1.3);
-    this.laps[0].visible = false;
+    await walkPath(boy, [[-0.12, 0, 1.34]], 1.1);
     await this.stageChoice(D);
   },
-  /** k = 1 normal, k → 0.12 the boy reads as a pure silhouette against the street */
+
+  /** k = 1 normal; he stays readable, the room just sinks around him */
   silhouette(k) {
     this.boy.root.traverse(o => {
       if (!o.isMesh || !o.material.color) return;
@@ -326,36 +514,72 @@ export default {
       if (m.clearcoat != null) { m.clearcoat = m.userData.cc * k; m.sheen = 0.25 * k; }
     });
   },
+  /** he stands at your knees with his hand out, palm up, and looks at you: he is asking */
   async stageChoice(D) {
-    const boy = this.boy;
-    animate(k => this.silhouette(1 - 0.88 * k), 1.6);
-    boy.root.position.set(0.05, 0, 1.78);
-    boy.root.rotation.y = 2.05; boy.pose('stoop'); boy.set({ shL: [-55, 0, 6], elL: [-30, 0, 0] });
-    boy.look(new THREE.Vector3(0.7, 1.1, 1.3), 1); boy.expression({ worry: 0.6 });
-    // stage it: interior goes dark, he is rimmed by the light from the street behind him
-    this.tubeL.forEach(l => (l.userData.dim = 0.12));
-    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * k; this.hemi.intensity = 0.35 * (1 - k * 0.9); this.sky.intensity = 0.55 * (1 - k * 0.85); this.scene.environmentIntensity = 0.18 * (1 - k * 0.85); this.engine.renderer.toneMappingExposure = e0 * (1 - 0.22 * k); this.follow.position.z = 12.5 - 6 * k; }, 1.8);
-    this.cam([0.66, 1.1, 1.28], [0.02, 0.98, 1.95], 1.6, 40);
+    const boy = this.boy, E = this.engine;
+    this.watch = null;
+    boy.turnTo = PI / 2;
+    boy.pose('stand'); boy.set({ spine: [10, 0, 0], neck: [-12, 0, 0], shL: [-24, 0, 10], elL: [-60, 0, 0] });
+    const eye = new THREE.Vector3(0.66, 1.12, 1.3);
+    boy.look(eye, 1); boy.expression({ worry: 0.75, sad: 0.25 });
+    boy.reach('R', new THREE.Vector3(0.12, 0.86, 1.44), { rate: 4.5, pole: [-1, -1.2, -0.3], wrist: [12, -48, 0], twist: -48 });
+    this.lowTo = 1; this.lowX = 0.35; this.lowY = 1.25;
+    this.tubeL.forEach(l => (l.userData.dim = 0.55));
+    const e0 = this.grade.exposure;
+    animate(k => { this.rim.intensity = 1.8 * k; this.hemi.intensity = 0.35 * (1 - k * 0.45); this.sky.intensity = 0.55 * (1 - k * 0.5); this.scene.environmentIntensity = 0.18 * (1 - k * 0.4); E.renderer.toneMappingExposure = e0 * (1 - 0.08 * k); }, 1.6);
+    E.dof({ target: boy.head, aperture: 0.002 });
+    this.cam([0.66, 1.12, 1.3], [0.02, 0.98, 1.36], 1.5, 50);
     await D.wait(1.0);
   },
   async hopOff(D) {
     const boy = this.boy;
-    animate(k => this.silhouette(0.12 + 0.88 * k), 2.5);
-    this.tubeL.forEach(l => (l.userData.dim = 1));
+    this.tubeL.forEach(l => (l.userData.dim = 1)); this.lowTo = 0; this.lowX = 0.25; this.lowY = 1.2;
     audio.roofBang();
-    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * (1 - k); this.hemi.intensity = 0.035 + 0.315 * k; this.sky.intensity = 0.08 + 0.47 * k; this.scene.environmentIntensity = 0.027 + 0.153 * k; this.engine.renderer.toneMappingExposure = e0 * (0.78 + 0.22 * k); this.follow.position.z = 6.5 + 6 * k; }, 2);
+    const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 1.8 * (1 - k); this.hemi.intensity = 0.1925 + 0.1575 * k; this.sky.intensity = 0.275 + 0.275 * k; this.scene.environmentIntensity = 0.108 + 0.072 * k; this.engine.renderer.toneMappingExposure = e0 * (0.92 + 0.08 * k); }, 2);
     this.targetSpeed = 0; audio.engine(1, 0.3);
-    boy.pose('stand'); boy.look(null); boy.expression({});
+    boy.pose('stand'); boy.look(null); boy.expression({}); boy.reach('R', null, { rate: 6 });
     this.cam([0.62, 1.13, 1.32], [-0.1, 0.6, 2.8], 2.2, 48);
     await walkPath(boy, [[0, 0, 1.95], [0.05, -0.3, 2.35], [0.3, -0.8, 3.2], [1.6, -0.8, 5.5]], 1.3);
     this.targetSpeed = 7; audio.engine(1, 1);
   },
 
+  /** give: your hand brings the ₱20 down into the envelope on your lap */
+  async putCoin() {
+    const arm = this.arm, E = this.engine, wr = new THREE.Vector3(), elb = new THREE.Vector3(), rest = new THREE.Vector3(0.42, 0.42, 1.52), end = this.myEnv.position.clone();
+    this.jeep.localToWorld(end);
+    E.dof({ focus: 0.65, aperture: 0.004 });
+    await this.cam([0.64, 1.12, 1.3], this.lapLook(), 0.9, 40);
+    const c = this.coin; c.visible = true; arm.visible = true;
+    const place = (k, up) => { wr.copy(rest).lerp(end.clone().add(new THREE.Vector3(0.1, 0.1, 0.05)), k); elb.set(0.72, 0.62, 1.62); arm.reach(wr, elb, 1.2); c.position.copy(wr).add(new THREE.Vector3(-0.1, -0.03 - up * 0.05, -0.04)); c.rotation.set(0.6, 0, 0.3); this.jeep.worldToLocal(c.position); };
+    await animate(k => place(k, 0), 0.8, 'inOut');
+    await animate(k => place(1, k), 0.3, 'in');
+    audio.coin(); c.visible = false;
+    await this.dwell(0.25);
+    await animate(k => place(1 - k, 1), 0.6, 'inOut');
+    arm.visible = false;
+  },
+  /** he takes the envelope off your lap himself, into the same hand as the rest */
+  async takeBack() {
+    const boy = this.boy, E = this.engine, p = this.myEnv.position.clone(); this.jeep.localToWorld(p);
+    boy.reach('R', p.clone().add(new THREE.Vector3(-0.06, 0.08, 0)), { rate: 8, pole: [-1, -1, -0.5], wrist: [0, 0, 0] });
+    await this.dwell(0.55);
+    audio.paper();
+    const J = this.jeep, w = new THREE.Vector3(), m = this.myEnv, end = m.position.clone(), eq = m.quaternion.clone(), hq = new THREE.Quaternion();
+    boy.reach('R', () => w.set(0.14, 0.86, 1.3), { rate: 5, pole: [-1, -1, -0.5] });
+    await animate(k => { boy.arm.R.wr.getWorldPosition(w); const t = J.worldToLocal(w.clone()); m.position.lerpVectors(end, t, Math.min(1, k * 1.8)); }, 0.7, 'inOut');
+    boy.reach('R', null, { rate: 5 });
+    const st = new THREE.Vector3(); this.stack.getWorldPosition(st); J.worldToLocal(st); const p1 = m.position.clone();
+    await animate(k => m.position.lerpVectors(p1, st, k), 0.4, 'inOut');
+    m.visible = false; m.position.copy(end); m.quaternion.copy(eq); this.pileCount(Math.min(12, this.pileN + 1));
+  },
+
   async play(D, S, beat) {
+    this.settle();
     if (beat === 'montage') return this.montage(D, S);
     if (beat === 'again') return this.again(D, S);
+    if (beat === 'shoes') { this.resetBoy(); this.myEnv.visible = true; this.boy.root.position.set(-0.02, 0, 1.32); this.boy.root.rotation.y = PI / 2; this.engine.rig.set({ pos: [0.64, 1.12, 1.3], look: this.lapLook(), fov: 40 }); await D.black(false, 0.4); await D.wait(1.5); await this.yourShoes(D); await this.dwell(2); return this.stageChoice(D); }
     if (beat === 'phone') { this.resetBoy(); await D.black(false, 0.5); await D.wait(0.4); return this.textMessage(D); }
-    if (beat === 'choice') { this.resetBoy(); this.myEnv.visible = true; this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 }); await D.black(false, 0.5); await this.stageChoice(D); return D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10 }); }
+    if (beat === 'choice') { this.resetBoy(); this.myEnv.visible = true; this.boy.root.position.set(0, 0, 1.3); this.boy.root.rotation.y = PI / 2; this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 }); await D.black(false, 0.5); await this.stageChoice(D); return D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10 }); }
     const boy = this.boy;
     this.resetBoy();
     await D.black(false, 2.0);
@@ -370,21 +594,30 @@ export default {
     C.bark(this.l1, 'Isa pong Cubao.');
     await D.wait(1.5);
     await this.board(D);
-    boy.pose('crouch'); boy.root.rotation.y = -PI / 2; boy.look(this.l1.head, 0.6);
     C.intro('Totoy', 'Araw-araw siyang nandito sa rutang ito.');
-    await D.say('', 'May batang sumakay. Walang tsinelas, basang-basa.');
-    this.wipeAnim(boy);
-    this.engine.dof({ target: boy.head, aperture: 0.004 });
-    await this.cam([0.6, 1.1, 1.36], [-0.25, 0.22, 1.6], 2.4, 44);
-    await D.say('', 'Isa-isa niyang pinupunasan ang sapatos ng mga pasahero.');
-    this.laps[0].visible = true; audio.paper();
-    boy.anim = null;
-    this.cam([0.66, 1.13, 1.3], [-1, 1.0, 0.6], 2.5, 50);
-    await moveTo(boy.root, [0, 0, 0.9], 1.6);
-    [1, 5, 2, 3, 4, 7, 8].forEach(i => (this.laps[i].visible = true));
-    await D.wait(1.0);
+    this.engine.dof({ target: boy.head, aperture: 0.003 });
+    this.lowTo = 1;
+    D.say('', 'May batang sumakay. Walang tsinelas, basang-basa.');
+    await this.cam([0.6, 1.1, 1.36], [-0.25, 0.42, 1.5], 2.2, 46);
+    // the first one, close, so we see exactly what he does
+    await this.serve(this.l1, this.laps[0], { wipe: 2.4 });
+    D.say('', 'Isa-isa, nag-iiwan siya ng sobre sa kandungan, tapos pinupunasan ang sapatos.', { hold: 4.6 });
+    this.follow(boy, 0.55, 2.2);
+    await this.serve(this.l2, this.laps[1], { wipe: 1.6 });
+    await this.serve(this.l3, this.laps[2], { wipe: 1.2 });
+    this.follow(boy, 0.8, 2.2);
+    await this.serve(this.l4, this.laps[3], { walk: 1.5, wipe: 0.7 });
+    await this.serve(this.l5, this.laps[4], { walk: 1.5, wipe: 0.7 });
+    await this.serve(this.r5, this.laps[8], { walk: 1.5, wipe: 0.7 });
+    await this.serve(this.r4, this.laps[7], { walk: 1.5, wipe: 0.7 });
+    await this.serve(this.r3, this.laps[6], { walk: 1.5, wipe: 0.7 });
+    await this.serve(this.ale, this.laps[5], { walk: 1.4, wipe: 1.0 });
     await this.atYourFeet(D);
-    await D.wait(0.4);
+    await D.wait(0.2);
+    // he moves on up the aisle while you read what's in your lap
+    this.engine.dof({ focus: 0.72, aperture: 0.004 });
+    this.cam([0.64, 1.12, 1.3], this.lapLook(), 1.8, 34);
+    const up = walkPath(boy, [[0, 0, -1.9]], 1.2).then(() => { boy.turnTo = PI; });
     await D.say('', '<em>"Pang-kain lang po. Salamat po."</em>', { hold: 3.2 });
     // the ale
     this.ale.look(new THREE.Vector3(0.7, 1.1, 1.3), 1); this.ale.set({ spine: [0, -12, 0] });
@@ -393,9 +626,10 @@ export default {
     this.ale.expression({ worry: 0.7, sad: 0.3 });
     await D.say('Ale', "'Wag mong bigyan. Sindikato 'yan.");
     this.ale.set({ spine: [0, 0, 0] }); this.ale.look(null);
-    this.engine.dof({ focus: 0.75, aperture: 0.004 });
-    await this.cam([0.66, 1.13, 1.3], [0.4, 0.52, 1.3], 1.6, 40);
+    this.engine.dof({ focus: 0.72, aperture: 0.004 });
+    await this.cam([0.66, 1.13, 1.3], this.lapLook(), 1.6, 40);
     await D.say('', "₱160 ang laman ng wallet mo. Pamasahe at pagkain mo na 'yan hanggang Biyernes.");
+    await up;
 
     await this.collect(D);
     const pick = await D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10, id: 'sobre', def: 1 });
@@ -403,22 +637,19 @@ export default {
     S.sobre = gave;
     if (gave) {
       S.wallet -= 20;
-      this.coin.visible = true; this.engine.dof({ focus: 0.4, aperture: 0.005 });
-      await animate(k => { this.coin.position.y = -0.16 - k * 0.12; this.coin.rotation.x = 1.2 + k * 3; }, 0.9, 'in');
-      audio.coin(); this.coin.visible = false; this.coin.position.y = -0.16;
-      this.engine.dof({ target: boy.head, aperture: 0.003 });
-      await D.wait(0.5); this.myEnv.visible = false; audio.paper();
-      boy.set({ shL: [-30, 0, 6], elL: [-80, 0, 0], neck: [26, 0, 0] }); boy.look(null);
-      await D.wait(1.2);
-      boy.set({ neck: [-14, 0, 0] }); boy.look(new THREE.Vector3(0.7, 1.12, 1.3), 1); boy.expression({ smile: 1 });
+      await this.putCoin();
+      this.engine.dof({ target: boy.head, aperture: 0.002 });
+      this.cam([0.66, 1.12, 1.3], [0.02, 0.98, 1.36], 1.0, 50);
+      await this.takeBack();
+      boy.look(new THREE.Vector3(0.7, 1.12, 1.3), 1); boy.expression({ smile: 1 });
       boy.anim = (t, q) => { q.hips.position.y += Math.max(0, Math.sin(t * 7)) * 0.012; };
       await D.say('Totoy', 'Salamat po, kuya.');
       boy.anim = null;
       D.patak('Totoy', 'napangiti');
     } else {
-      await D.wait(0.7); this.myEnv.visible = false; audio.paper();
+      await this.takeBack();
       boy.look(null); boy.set({ neck: [34, 0, 0], spine: [8, 0, 0] }); boy.expression({ sad: 0.8 });
-      await D.wait(1.4);
+      await D.wait(0.9);
       await D.say('', D.lastTimedOut ? 'Hindi ka nakapagdesisyon. Kinuha niya ang sobre.' : 'Kinuha niya ang sobre nang hindi ka tinitingnan.');
       D.patak('Totoy', 'hindi ka na tiningnan');
     }
@@ -429,19 +660,20 @@ export default {
 
   /** Part Two: the next morning, nothing changed */
   async montage(D, S) {
+    this.settle();
     this.resetBoy(); this.offset += 40;
     this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 });
     await D.black(false, 1.2);
     cast(D).bark(this.l1, 'Bayad po.'); audio.barya();
     await D.wait(1.6);
     await this.board(D);
-    this.myEnv.visible = false;
     await this.atYourFeet(D, false);
     await D.say('', S.sobre ? 'Parehong bata. Parehong sobre. Hindi ka niya naaalala.' : 'Parehong bata. Parehong sobre.');
     // two more kids running for the jeep behind us
     for (const k of this.extraKids) { k.root.visible = true; }
-    this.engine.dof({ focus: 6, aperture: 0.002 });
-    await this.cam([0.62, 1.13, 1.32], [0.2, 0.4, 6], 1.8, 44);
+    // from the open back of the jeep, down the road: two more kids running for the one behind
+    this.engine.dof({ focus: 6, aperture: 0.0015 });
+    await this.cam([0.2, 1.05, 2.0], [0.55, -0.25, 9.5], 1.8, 46);
     await Promise.all(this.extraKids.map((k, i) => walkPath(k, [[0.9 + i * 0.5, -0.8, 6.5], [0.5 + i * 0.3, -0.8, 11.2]], 2.2)));
     await D.say('', 'Sa kasunod na jeep, dalawa pang bata ang sumakay.');
     await D.black(true, 0.8);
@@ -450,16 +682,20 @@ export default {
 
   /** Part Four: Thursday. Same choice, no outcome shown. Returns the pick. */
   async again(D, S) {
+    this.settle();
     this.resetBoy(); this.offset += 80;
-    [1, 2, 3, 4, 5, 7, 8].forEach(i => (this.laps[i].visible = true)); this.myEnv.visible = true;
+    this.laps.forEach(e => (e.visible = true)); this.myEnv.visible = true; this.pileCount(2);
+    this.rag.removeFromParent(); this.boy.chest.add(this.rag); this.rag.position.set(-0.09 * this.boy.s, 0.13, -0.02); this.rag.rotation.set(0.3, 0, -0.5);
     this.boy.root.position.set(0, 0, -1.9); this.boy.root.rotation.y = 0;
     this.engine.dof({ focus: 0.75, aperture: 0.004 });
     this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [0.38, 0.5, 1.29], fov: 34 });
     await D.black(false, 1.4);
-    await D.wait(1.6);
+    await D.wait(0.8);
+    await D.say('', '₱20 na lang ang laman ng wallet mo. Bukas pa ang sahod.');
     await this.collect(D);
-    const pick = await D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10, id: 'ulit', def: 1 });
-    if (pick === 0) { this.coin.visible = true; await animate(k => { this.coin.position.y = -0.16 - k * 0.12; this.coin.rotation.x = 1.2 + k * 3; }, 0.9, 'in'); audio.coin(); this.coin.visible = false; this.coin.position.y = -0.16; }
+    const pick = await D.choose(['Magbigay|Ibigay ang huling bente mo', 'Ibalik|Wala ka na ring pera'], { timer: 10, id: 'ulit', def: 1 });
+    if (pick === 0) await this.putCoin();
+    await this.takeBack();
     await D.black(true, 1.4);
     return pick;
   },

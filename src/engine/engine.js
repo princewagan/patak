@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
 const FinalShader = {
   uniforms: {
@@ -75,9 +76,19 @@ export class Engine {
     this.clock = new THREE.Clock();
     this.updaters = new Set();
 
-    const comp = this.composer = new EffectComposer(r);
+    // the post chain renders off-screen, where the canvas's antialias flag does nothing: give it its own 4× MSAA
+    const comp = this.composer = new EffectComposer(r, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
     this.renderPass = new RenderPass(this.scene, this.camera);
     comp.addPass(this.renderPass);
+    // contact shadows (ambient occlusion) at half resolution. Only built 3D sets ask for it (mod.ao):
+    // it would darken the depth-mapped photos. ?noao turns it off; a slow machine drops it first (adapt).
+    const ao = this.ao = new GTAOPass(this.scene, this.camera, 640, 360);
+    ao.updateGtaoMaterial({ radius: 0.3, distanceExponent: 1.3, thickness: 1, scale: 1.2, samples: 8, distanceFallOff: 1, screenSpaceRadius: false });
+    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 3, radiusExponent: 1, rings: 2, samples: 8 });
+    ao.blendIntensity = 0.9; ao.enabled = false;
+    const aoSize = ao.setSize.bind(ao); ao.setSize = (w, h) => aoSize(Math.ceil(w / 2), Math.ceil(h / 2));
+    this.aoAllowed = !new URLSearchParams(location.search).has('noao');
+    comp.addPass(ao);
     this.bokeh = new BokehPass(this.scene, this.camera, { focus: 1.5, aperture: 0.004, maxblur: 0.008 });
     this.bokeh.enabled = false;
     comp.addPass(this.bokeh);
@@ -125,6 +136,7 @@ export class Engine {
     this.scene = mod.scene;
     this.renderPass.scene = mod.scene;
     this.bokeh.scene = mod.scene;
+    this.ao.scene = mod.scene; this.ao.enabled = !!mod.ao && this.aoAllowed;
     // per-scene post passes (e.g. rain on a windshield), inserted right after the render pass
     for (const p of this.extra || []) this.composer.removePass(p);
     this.extra = mod.passes || [];
@@ -154,7 +166,8 @@ export class Engine {
     if (this._ft < 2) return;
     const avg = this._ft / this._fn; this._ft = 0; this._fn = 0;
     const pr = this.renderer.getPixelRatio();
-    if (avg > 0.034 && pr > 0.7) { const n = Math.max(0.7, pr - 0.2); this.renderer.setPixelRatio(n); this.composer.setPixelRatio(n); this.resize(); }
+    if (avg > 0.024 && this.ao.enabled) { this.ao.enabled = false; this.aoAllowed = false; }   // the first thing to go, for the rest of the game
+    else if (avg > 0.034 && pr > 0.7) { const n = Math.max(0.7, pr - 0.2); this.renderer.setPixelRatio(n); this.composer.setPixelRatio(n); this.resize(); }
     else if (avg > 0.05 && this.bokeh.enabled) this.lowDof = true;
   }
 

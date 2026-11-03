@@ -10,6 +10,7 @@ import { phoneModel, chatScreen } from './phone.js';
 import { prewarm } from '../engine/prewarm.js';
 
 const PI = Math.PI;
+const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _r = new THREE.Vector3();
 
 /* KAHA: fast food in Cubao, 2:15 PM.
    Counter front at z = 0 (customers at +z). Crew area z ∈ [-2.6, 0].
@@ -56,6 +57,7 @@ function menuScreen(items, k = 0.5) {
 }
 
 export default {
+  ao: true,   // contact shadows (see Engine)
   dof: { focus: 1.4, aperture: 0.0028, maxblur: 0.007 },
   grade: { lift: [0.004, 0.006, 0.004], gain: [0.98, 1.0, 0.92], sat: 1.05, grain: 0.06, bloom: 0.38, bloomThreshold: 0.84, exposure: 1.4, vignette: 0.9, ca: 0.0016, black: 0.015, gamma: 1.34, curve: 0.5 },
 
@@ -147,9 +149,12 @@ export default {
     S.add(at(box(0.6, 0.9, 0.62, steelDark), -2.18, 0.45, -1.75));
     for (const dz of [-0.12, 0.12]) { const nz = cyl(0.02, 0.012, 0.08, steel, 10); nz.position.set(-1.92, 1.05, -1.75 + dz); S.add(nz); }
     S.add(at(new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.18), menuScreen(['SUNDAE', 'FLOAT'], 0.45)), -1.89, 1.55, -1.75, PI / 2));
+    // stacked paper cups: each rim catches a line of light, so a stack reads as cups, not a tube
+    const rimT = canvasTex(64, 256, (c, w, h) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, w, h); for (let y = 6; y < h; y += 14) { c.fillStyle = 'rgba(0,0,0,0.28)'; c.fillRect(0, y, w, 3); c.fillStyle = 'rgba(255,255,255,0.9)'; c.fillRect(0, y - 2, w, 2); } });
+    const cupM = [0xf0ece2, 0xc8231e, 0xe7b52c].map(col => new THREE.MeshStandardMaterial({ color: col, map: rimT, roughness: 0.55 }));
     for (let k = 0; k < 3; k++) {
       S.add(at(box(0.32, 0.02, 0.9, steel), -2.38, 1.35 + k * 0.32, -0.75));
-      for (let i = 0; i < 6; i++) { const st = cyl(0.04, 0.032, 0.2, std([0xf0ece2, 0xc8231e, 0xe7b52c][(i + k) % 3], { rough: 0.6 }), 12); st.position.set(-2.38, 1.46 + k * 0.32, -1.1 + i * 0.14); S.add(st); }
+      for (let i = 0; i < 6; i++) { const st = cyl(0.04, 0.032, 0.2, cupM[(i + k) % 3], 12); st.position.set(-2.38, 1.46 + k * 0.32, -1.1 + i * 0.14); S.add(st); }
     }
     const clockT = canvasTex(256, 256, (c, w) => { c.fillStyle = '#f6f4ee'; c.beginPath(); c.arc(128, 128, 120, 0, PI * 2); c.fill(); c.strokeStyle = '#222'; c.lineWidth = 8; c.stroke(); c.fillStyle = '#222'; for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; c.fillRect(128 + Math.sin(a) * 98 - 3, 128 - Math.cos(a) * 98 - 8, 6, 16); } c.lineCap = 'round'; c.lineWidth = 9; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + Math.sin(2.25 / 12 * PI * 2) * 55, 128 - Math.cos(2.25 / 12 * PI * 2) * 55); c.stroke(); c.lineWidth = 5; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + Math.sin(0.25 * PI * 2) * 85, 128 - Math.cos(0.25 * PI * 2) * 85); c.stroke(); });
     S.add(at(new THREE.Mesh(new THREE.CircleGeometry(0.16, 32), new THREE.MeshStandardMaterial({ map: clockT, roughness: 0.4 })), -2.53, 2.35, -1.2, PI / 2));
@@ -164,7 +169,7 @@ export default {
     S.add(at(box(0.012, 0.64, 0.012, steel), -0.3, COUNTER_Y + 0.33, -0.73));
 
     /* ---------- counter ---------- */
-    const counterTop = new THREE.MeshStandardMaterial({ color: 0x8f9498, metalness: 0.8, roughness: 0.45 });
+    const counterTop = new THREE.MeshStandardMaterial({ color: 0x8f9498, metalness: 0.8, roughness: 0.62, ...brushed }); counterTop.normalScale.set(0.25, 0.25);
     S.add(at(box(4.4, 0.04, 0.75, counterTop), -0.2, COUNTER_Y, -0.32));
     S.add(at(box(4.3, 0.97, 0.6, std(0x9b1e1a, { rough: 0.55 })), -0.2, 0.485, -0.25)); // customer face (red)
     S.add(at(box(4.3, 0.1, 0.02, std(0xe7b52c, { rough: 0.5 })), -0.2, 0.8, 0.06));
@@ -207,11 +212,25 @@ export default {
     for (let i = 0; i < 7; i++) { const t = box(0.42, 0.015, 0.32, trayM, 0.01); t.position.set(1.65, COUNTER_Y + 0.03 + i * 0.016, -0.35); S.add(t); }
     const myTray = this.myTray = new THREE.Group(); myTray.position.set(0.3, COUNTER_Y + 0.03, -0.38);
     myTray.add(box(0.42, 0.015, 0.32, trayM, 0.01));
-    const wrap = box(0.11, 0.05, 0.11, std(0xe9d9a8, { rough: 0.8 }), 0.01); wrap.position.set(-0.09, 0.035, 0.03); myTray.add(wrap);
-    const fries = box(0.07, 0.11, 0.045, std(0xc8231e, { rough: 0.6 })); fries.position.set(0.06, 0.06, 0.06); myTray.add(fries);
-    for (let i = 0; i < 6; i++) { const f = box(0.008, 0.05, 0.008, std(0xe8c35a, { rough: 0.7 })); f.position.set(0.04 + i * 0.008, 0.13, 0.06 + (i % 2) * 0.01); f.rotation.z = (i - 3) * 0.08; myTray.add(f); }
-    const cup = cyl(0.038, 0.03, 0.14, std(0xf0ece2, { rough: 0.6 }), 14); cup.position.set(0.12, 0.075, -0.07); myTray.add(cup);
-    const lid = cyl(0.04, 0.04, 0.01, std(0xf6f2ea, { rough: 0.5 }), 14); lid.position.set(0.12, 0.15, -0.07); myTray.add(lid);
+    const wrapT = canvasTex(256, 128, (c, w, h) => { c.fillStyle = '#e9d9a8'; c.fillRect(0, 0, w, h); c.strokeStyle = 'rgba(120,90,40,.35)'; c.lineWidth = 3; for (let i = 0; i < 9; i++) { c.beginPath(); c.moveTo(i * 32, 0); c.lineTo(i * 32 + 18, h); c.stroke(); } c.fillStyle = '#c8231e'; c.fillRect(0, h * 0.42, w, h * 0.14); });
+    const wrap = new THREE.Mesh(new THREE.SphereGeometry(0.058, 20, 12), new THREE.MeshStandardMaterial({ map: wrapT, roughness: 0.75 })); wrap.scale.set(1, 0.62, 1); wrap.position.set(-0.09, 0.043, 0.03); wrap.castShadow = true; myTray.add(wrap);
+    { // a paper fries carton: narrow at the base, scooped at the top, with real sticks in it
+      const G = new THREE.Group(); G.position.set(0.06, 0.008, 0.07); myTray.add(G);
+      const g = new THREE.CylinderGeometry(0.05, 0.034, 0.1, 4, 4, true, Math.PI / 4), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { if (p.getY(i) > 0.04) p.setY(i, 0.05 + Math.abs(p.getX(i)) * 0.5 - 0.016); p.setZ(i, p.getZ(i) * 0.62); }
+      g.computeVertexNormals();
+      const carton = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0xc8231e, roughness: 0.55, side: THREE.DoubleSide })); carton.position.y = 0.05; carton.castShadow = true; G.add(carton);
+      const stick = new THREE.BoxGeometry(0.0075, 0.075, 0.0075), sm = std(0xe8c35a, { rough: 0.7 });
+      for (let i = 0; i < 16; i++) { const a = i * 2.4, r = 0.006 + (i % 4) * 0.0065; const f = new THREE.Mesh(stick, sm); f.position.set(Math.cos(a) * r * 1.5, 0.09 + (i % 3) * 0.008, Math.sin(a) * r * 0.75); f.rotation.set(Math.sin(a) * 0.14, a, Math.cos(a) * 0.14); G.add(f); }
+    }
+    { // paper cup with a domed lid and a straw
+      const G = new THREE.Group(); G.position.set(0.12, 0.008, -0.07); myTray.add(G);
+      G.add(at(cyl(0.039, 0.03, 0.125, std(0xf0ece2, { rough: 0.6 }), 24), 0, 0.0625, 0));
+      G.add(at(cyl(0.0392, 0.0345, 0.04, std(0xc8231e, { rough: 0.55 }), 24), 0, 0.075, 0));
+      G.add(at(cyl(0.041, 0.0415, 0.006, std(0xf6f2ea, { rough: 0.5 }), 24), 0, 0.128, 0));
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.036, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), std(0xf6f2ea, { rough: 0.45 })); dome.scale.y = 0.34; dome.position.y = 0.13; G.add(dome);
+      const straw = cyl(0.0032, 0.0032, 0.1, std(0xc8231e, { rough: 0.4 }), 8); straw.position.set(0.007, 0.178, 0); straw.rotation.z = -0.14; G.add(straw);
+    }
     S.add(myTray);
     for (let i = 0; i < 4; i++) { const c = cyl(0.04, 0.032, 0.14, std(0xe8e2d4, { rough: 0.6 }), 14); c.position.set(2.0 + (i % 2) * 0.1, COUNTER_Y + 0.09, -0.5 + Math.floor(i / 2) * 0.1); S.add(c); }
 
@@ -269,9 +288,12 @@ export default {
     });
     this.clipCanvasT = clipT;
     this.clip = new THREE.Group();
-    this.clip.add(at(box(0.23, 0.32, 0.008, std(0x6b4a2c, { rough: 0.6 })), 0, 0, 0));
-    const cp = paper(0.21, 0.29, clipT); cp.position.z = 0.006; this.clip.add(cp);
-    this.clip.add(at(box(0.08, 0.03, 0.015, std(0xb8bcc0, { metal: 0.9, rough: 0.3 })), 0, 0.15, 0.01));
+    this.clip.add(at(box(0.23, 0.32, 0.006, std(0x6b4a2c, { rough: 0.6 }), 0.003), 0, 0, 0));
+    const cp = paper(0.21, 0.29, clipT); cp.position.z = 0.0045; this.clip.add(cp);
+    this.clip.add(at(box(0.09, 0.025, 0.012, std(0xb8bcc0, { metal: 0.9, rough: 0.3 })), 0, 0.15, 0.008));
+    // where her hands go on it
+    this.clipL = new THREE.Object3D(); this.clipL.position.set(0.12, -0.14, -0.05); this.clip.add(this.clipL);
+    this.clipR = new THREE.Object3D(); this.clipR.position.set(-0.05, 0.02, 0.06); this.clip.add(this.clipR);
 
     // phone for the break (silent branch)
     this.phone = phoneModel(chatScreen, { gain: 0.62 });
@@ -321,20 +343,20 @@ export default {
 
     /* ---------- crew ---------- */
     const crewTop = 0x8f1d1b, crewCap = 0x7d1714;
-    const apron = (p, col = 0x1f1f22) => { const a = box(0.27, 0.42, 0.012, std(col, { rough: 0.9 })); a.position.set(0, 0.05, 0.095); p.spine.add(a); const t = box(0.05, 0.016, 0.003, std(0xf2f2f2, { rough: 0.5 })); t.position.set(0.07, 0.21, 0.105); p.spine.add(t); };
     const weng = this.weng = new Person({ real: 'weng', h: 1.55, skin: 'tan', top: crewTop, bottom: 0x1b1c1f, hair: 'bun', hairColor: 0x1d1714, cap: crewCap, build: 1.08, belly: true, sleeve: 0.14 });
-    apron(weng); weng.hair.scale.set(0.95, 0.9, 0.97); weng.hair.children[weng.hair.children.length - 1].visible = false; weng.root.position.set(-1.55, 0, -1.4); weng.root.rotation.y = 0.75; S.add(weng.root); this.people.push(weng);
+    weng.root.position.set(-1.55, 0, -1.4); weng.root.rotation.y = 0.75; S.add(weng.root); this.people.push(weng);
     const joy = this.joy = new Person({ real: 'joy', h: 1.6, skin: 'light', top: 0x9fb2c2, bottom: 0x24262c, hair: 'long', hairColor: 0x2a1d16, build: 1.0, sleeve: 0.12 });
-    { const t = box(0.05, 0.016, 0.003, std(0xf7d24a, { rough: 0.5 })); t.position.set(0.07, 0.22, 0.1); joy.spine.add(t); }
     joy.root.position.set(-0.95, 0, -1.0); joy.root.rotation.y = 0.15; S.add(joy.root); this.people.push(joy);
     const mark = this.mark = new Person({ real: 'mark', h: 1.72, skin: 'brown', top: crewTop, bottom: 0x1b1c1f, hair: 'short', cap: crewCap, build: 0.95, sleeve: 0.14 });
-    apron(mark); mark.hair.scale.set(0.95, 0.9, 0.97); mark.root.position.set(1.35, 0, -1.6); mark.root.rotation.y = PI; S.add(mark.root); this.people.push(mark);
+    mark.root.position.set(1.35, 0, -1.6); mark.root.rotation.y = PI; S.add(mark.root); this.people.push(mark);
     for (const p of [weng, joy, mark]) { const b = blob(0.32, 0.45); b.position.y = 0.002; p.root.add(b); }
     // bills fanned in Joy's right hand while counting
     this.bills = new THREE.Group();
     for (let i = 0; i < 5; i++) { const b = billMesh(i % 2 ? 50 : 100, 0.15); b.position.set(0, -0.08, 0.02 + i * 0.002); b.rotation.z = Math.PI / 2 + (i - 2) * 0.08; this.bills.add(b); }
     joy.arm.L.wr.add(this.bills);
 
+    this.clip.rotation.set(-PI / 2, 0, 0.2); this.clip.position.set(-1.28, COUNTER_Y + 0.026, -0.56); S.add(this.clip);
+    this.clipHome = { p: this.clip.position.clone(), r: this.clip.rotation.clone() };
     this.beepStop = null;
   },
 
@@ -411,8 +433,19 @@ export default {
     E.dof({ target: weng.arm.L.wr, aperture: 0.0035 });
     cam([0.45, 1.58, -1.35], [-1.45, 1.1, -1.3], 1.8, 32);
     await D.say('Ate Weng', "Ma'am, hindi ko po alam kung saan napunta…");
-    joy.look(weng.head, 1); joy.set({ shL: [-12, 0, 14], elL: [-92, -20, 0], shR: [-30, 0, -10], elR: [-70, 30, 0] });
-    joy.arm.L.wr.add(this.clip); this.clip.position.set(0.02, -0.06, 0.06); this.clip.rotation.set(-1.0, 0, 0); this.bills.visible = false;
+    joy.anim = null;
+    joy.reach('L', new THREE.Vector3(-0.92, 1.02, -0.56), { rate: 6 });
+    await D.wait(0.7);
+    this.drawer.attach(this.bills); this.bills.position.set(0, 0.05, -0.05); this.bills.rotation.set(0, 0, 0); audio.paper();   // back in the drawer
+    joy.reach('L', new THREE.Vector3(-1.2, 1.1, -0.62), { rate: 6 });
+    await D.wait(0.55);
+    { // she lifts the clipboard off the counter and holds it against her forearm
+      const c = this.clip, sp = joy.spine; sp.attach(c); audio.paper();
+      const p0 = c.position.clone(), q0 = c.quaternion.clone(), p1 = new THREE.Vector3(0.06, 0.0, 0.24), q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.95, 0, 0.14));
+      joy.reach('L', this.clipL, { rate: 10 });
+      animate(k => { c.position.lerpVectors(p0, p1, k); c.quaternion.slerpQuaternions(q0, q1, k); }, 0.8, 'inOut');
+    }
+    joy.look(weng.head, 1);
     E.dof({ target: joy.head, aperture: 0.003 });
     cam([0.5, 1.6, -1.3], [-1.0, 1.4, -1.0], 1.8, 40);
     await D.say("Ma'am Joy", 'Alam mo naman ang rule. Kulang sa kaha, kaltas sa sahod.');
@@ -427,36 +460,47 @@ export default {
     await D.say('', "Hindi niya ni-log. Kaya ngayon, si Ate Weng ang lumalabas na kulang.");
     // Mark leans in from your right
     mark.anim = null; mark.pose('stand'); mark.look(null);
-    walkPath(mark, [[0.9, 0, -1.9], [0.28, 0, -1.74]], 1.4).then(() => { mark.root.rotation.y = 0.55; mark.set({ neck: [10, 0, 0], spine: [8, 0, 0] }); mark.look(new THREE.Vector3(0.5, 1.55, -1.3), 0.9); });
-    E.dof({ target: weng.head, aperture: 0.005 });
-    await cam([0.5, 1.6, -1.3], [-1.1, 1.4, -1.8], 1.6, 56);
+    // he wanders over and leans back against the steel of the fryer station, arms folded: it's not his problem
+    walkPath(mark, [[1.3, 0, -1.67]], 1.1).then(() => {
+      mark.turnTo = -0.55;
+      mark.set({ hips: [8, 0, 0], spine: [-10, 0, 0], neck: [2, 0, 7], hpL: [-14, 0, 5], hpR: [-6, 0, -9], knL: [6, 0, 0], knR: [4, 0, 0], anL: [6, 0, 0], anR: [2, 0, 0] });
+      const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
+      mark.reach('L', () => mark.chest.localToWorld(v1.set(-0.11, -0.14, 0.17)), { rate: 5, pole: [1, -0.6, -0.2] });
+      mark.reach('R', () => mark.chest.localToWorld(v2.set(0.12, -0.11, 0.21)), { rate: 5, pole: [-1, -0.6, -0.2] });
+    });
+    mark.look(new THREE.Vector3(0.5, 1.58, -1.3), 0.9);
+    E.dof({ target: mark.head, aperture: 0.002 });
+    await cam([0.5, 1.6, -1.3], [1.24, 1.52, -1.66], 1.8, 40);
     C.intro('Mark', 'Katrabaho mo. Contractual din.');
     await D.say('Mark', "Pre, 'wag ka nang makialam. Renewal mo next week.");
     mark.look(weng.head, 0.6);
+    E.dof({ target: weng.head, aperture: 0.004 });
+    cam([0.5, 1.6, -1.3], [-1.3, 1.34, -1.4], 1.6, 44);
     await D.say('', 'Kapag nagsalita ka, baka hindi ka na ma-renew. Kapag nanahimik ka, ₱500 ang mawawala kay Ate Weng.', { hold: 5 });
-    // Joy turns to you
-    joy.look(you, 1); joy.root.rotation.y = 1.3; weng.look(you, 0.6);
-    // the question lands on the money, not on a face
-    const dw = this.drawer.getWorldPosition(new THREE.Vector3());
-    E.dof({ target: this.drawer, aperture: 0.007 });
-    animate(k => { joy.shade(1 - 0.8 * k); weng.shade(1 - 0.8 * k); }, 1.2);
+    // Joy turns to you. You answer with both of them looking at you.
+    joy.turnTo = 1.42; joy.look(you, 1); weng.look(you, 0.7); weng.turnTo = 1.15;
+    E.dof({ target: joy.head, aperture: 0.0012 });
     audio.duck(0.35, 2.5);   // the room seems to go quiet when she asks
-    await cam([dw.x + 0.55, dw.y + 0.5, dw.z - 0.35], dw.toArray(), 1.4, 22);
+    await cam([0.5, 1.6, -1.3], [-1.12, 1.36, -1.12], 1.6, 40);
+    joy.turnTo = null; weng.turnTo = null;
     await D.say("Ma'am Joy", 'May alam ka ba dito?', { hold: 2.2 });
 
     let pick = await D.choose(['Magsalita|Sabihin ang refund', 'Manahimik|May renewal ka pa next week'], { timer: 8, id: 'kaha', def: 1 });
     if (forceSilent) pick = 1; if (forceSpeak) pick = 0;
-    animate(k => { joy.shade(0.2 + 0.8 * k); weng.shade(0.2 + 0.8 * k); }, 1.0);
     audio.duck(1, 3);
     S.kaha = pick === 0;
 
     if (S.kaha) {
       await D.say('Ikaw', "Ma'am, 'yung refund po kanina… kayo po 'yung nag-approve.");
       // she picks up the receipt and reads it
-      joy.look(this.receipt, 0.9); joy.set({ spine: [14, 0, 0], shR: [-55, 0, -10], elR: [-40, 0, 0] });
-      await D.wait(0.4);
-      joy.arm.R.wr.add(this.receipt); this.receipt.position.set(0, -0.08, 0.05); this.receipt.rotation.set(-0.6, 0, 0);
-      joy.set({ spine: [0, 0, 0], shR: [-38, 0, -18], elR: [-96, 25, 0] });
+      joy.look(this.receipt, 0.9); joy.turnTo = 0.7; joy.set({ spine: [22, 0, 0] });
+      joy.reach('R', this.receipt.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.07, -0.05)), { rate: 7 });
+      await D.wait(0.75);
+      { const r = this.receipt, w = joy.arm.R.wr; w.attach(r); audio.paper();
+        const p0 = r.position.clone(), q0 = r.quaternion.clone(), q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, PI, 0));
+        animate(k => { r.position.lerpVectors(p0, new THREE.Vector3(0.0, -0.13, 0.03), k); r.quaternion.slerpQuaternions(q0, q1, k); }, 0.5, 'inOut'); }
+      joy.set({ spine: [2, 0, 0] });
+      joy.reach('R', () => _p.copy(joy.spine.getWorldPosition(_q)).add(_r.set(0.1, 0.2, 0.26).applyQuaternion(joy.root.quaternion)), { rate: 5, wrist: [0, 0, 0] });
       E.dof({ target: this.receipt, aperture: 0.004 });
       await cam([0.15, 1.55, -1.15], [-0.85, 1.32, -0.85], 1.2, 30);
       await D.say('', 'Tiningnan niya ang resibo. Nandoon nga.');
@@ -465,28 +509,28 @@ export default {
       await cam([0.5, 1.6, -1.3], [-1.1, 1.4, -1.1], 1.2, 40);
       await D.say("Ma'am Joy", 'Okay. Balik sa trabaho.', { hold: 2 });
       // she walks past you, writing on the clipboard
-      joy.arm.R.wr.remove(this.receipt); this.receipt.visible = false;
-      joy.look(this.clip, 0.9); joy.set({ shL: [-20, 0, 14], elL: [-100, -20, 0], shR: [-40, 0, -10], elR: [-90, 40, 0], neck: [26, 0, 0] });
+      { const c = this.clip, r = this.receipt; c.attach(r); const p0 = r.position.clone(), q0 = r.quaternion.clone(), q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0.12)); audio.paper();
+        await animate(k => { r.position.lerpVectors(p0, new THREE.Vector3(-0.02, -0.03, 0.008), k); r.quaternion.slerpQuaternions(q0, q1, k); }, 0.5, 'inOut'); }
+      joy.look(this.clip, 0.9); joy.turnTo = null; joy.set({ neck: [24, 0, 0] });
+      joy.reach('R', this.clipR, { rate: 8, wrist: [0, 0, 0] });
       joy.anim = (t, p) => { p.arm.R.wr.rotation.z = Math.sin(t * 14) * 0.15; };
-      joy.walk = 0.8;
-      const jp = moveTo(joy.root, [1.4, 0, -0.95], 3.2, { e: 'linear', ry: PI / 2 });
-      E.dof({ target: this.clip, aperture: 0.004 });
-      cam([0.5, 1.6, -1.3], [0.4, 1.2, -0.9], 2.8, 44);
+      const jp = walkPath(joy, [[-0.2, 0, -0.84], [1.5, 0, -0.84]], 0.75);
+      E.dof({ target: this.clip, aperture: 0.003 });
+      this.engine.rig.move({ look: [0.75, 1.3, -0.84], dur: 4.2, fov: 50, e: 'sine' });
       await D.say('', "Pagdaan niya sa'yo, may isinulat siya sa clipboard.");
-      await jp; joy.walk = 0; joy.anim = null;
+      await jp; joy.anim = null;
       // break: Weng comes to you
       await D.black(true, 0.6);
       joy.root.position.set(2.6, 0, 3);
-      weng.pose('standRelaxed', true); weng.root.position.set(-0.3, 0, -1.15); weng.root.rotation.y = 1.45; weng.expression({ smile: 0.7 });
-      weng.look(you, 1); weng.set({ shL: [-62, 0, 10], elL: [-25, 0, 0] });
-      rig.set({ pos: [0.5, 1.6, -1.3], look: [-0.2, 1.3, -1.25], fov: 42 });
-      E.dof({ target: weng.arm.L.wr, aperture: 0.003 });
+      weng.pose('standRelaxed', true); weng.root.position.set(-1.05, 0, -1.2); weng.root.rotation.y = PI / 2; weng.expression({ smile: 0.7 });
+      weng.look(you, 1);
+      rig.set({ pos: [0.5, 1.6, -1.3], look: [-0.45, 1.4, -1.25], fov: 44 });
+      E.dof({ target: weng.head, aperture: 0.002 });
       await D.black(false, 0.6);
-      await moveTo(weng.root, [0.08, 0, -1.22], 1.0);
-      rig.jolt = 0.3; setTimeout(() => (rig.jolt = 0), 300);
+      await walkPath(weng, [[-0.26, 0, -1.24]], 1.0);
+      weng.turnTo = PI / 2;
       await D.say('Ate Weng', "Salamat, ha. Pambaon 'yon ng mga anak ko.");
       D.patak('Ate Weng', 'nakahinga nang maluwag');
-      weng.set({ shL: [-8, 0, 6], elL: [-10, 0, 0] });
     } else {
       // you look down at your tray
       E.dof({ target: this.myTray, aperture: 0.005 });
@@ -506,7 +550,8 @@ export default {
         cam([sp.x + 0.08, 1.38, sp.z + 0.5], sp.toArray(), 3.2, 30, 'sine'); await D.wait(0.8); }
       weng.anim = (t, p) => { p.arm.R.wr.rotation.z = Math.sin(t * 18) * 0.25; p.arm.R.el.rotation.y = Math.sin(t * 2.4) * 0.12; };
       this.pen.removeFromParent(); this.scene.add(this.pen); this.pen.visible = true;
-      const penDir = new THREE.Vector3(0.18, 0.9, -0.4).normalize(), tip = new THREE.Vector3();
+      const penDir = new THREE.Vector3(0.18, 0.9, -0.4).normalize(), tip = new THREE.Vector3(), grip = new THREE.Vector3();
+      weng.reach('R', grip, { rate: 16, wrist: [0, 0, 0] });
       this.pen.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), penDir);
       this.slip.updateMatrixWorld(true);
       await animate(k => {
@@ -514,12 +559,13 @@ export default {
         const px = 315 + k * 240, py = 335 + Math.sin(k * 22) * 13 * (1 - k * 0.5) - Math.sin(k * 5) * 6;
         tip.set((px / 640 - 0.5) * 0.21, (0.5 - py / 420) * 0.14, 0.004); this.slip.localToWorld(tip);
         this.pen.position.copy(tip).addScaledVector(penDir, 0.066);
+        grip.copy(tip).addScaledVector(penDir, 0.075).add(_r.set(-0.02, 0.05, 0.05));
       }, 2.2, 'linear');
-      weng.anim = null;
+      weng.anim = null; weng.reach('R', null);
       await D.say('', 'Pinirmahan ni Ate Weng ang kaltas.');
-      this.pen.visible = false;
       // break corner: she sits alone, texting
       await D.black(true, 0.7);
+      this.pen.visible = false;
       joy.root.position.set(2.6, 0, 3);
       // she sits facing the wall, away from everyone
       weng.root.position.set(3.25, 0.03, -1.05); weng.root.rotation.y = PI + 0.45; weng.pose('sitSlump', true);
@@ -538,20 +584,12 @@ export default {
         const back = new THREE.Vector3(hp.x - pp.x, 0, hp.z - pp.z).normalize();
         const side = new THREE.Vector3(back.z, 0, -back.x);
         const c0 = hp.clone().addScaledVector(back, 0.95).addScaledVector(side, 0.42).add(new THREE.Vector3(0, 0.38, 0));
-        const c1 = hp.clone().addScaledVector(back, 0.75).addScaledVector(side, 0.34).add(new THREE.Vector3(0, 0.3, 0));
+        // it is one unbroken move: over her shoulder, then slowly down to the screen. It never reverses and never cuts.
+        const face = hp.clone().sub(pp).normalize(), c1 = pp.clone().addScaledVector(face, 0.34).addScaledVector(side, 0.17).add(new THREE.Vector3(0, 0.1, 0));
         rig.set({ pos: c0.toArray(), look: pp.toArray(), fov: 34 });
-        E.dof({ target: this.phone, aperture: 0.005 });
+        E.dof({ target: this.phone, aperture: 0.002, maxblur: 0.004 });
         await D.black(false, 0.8);
-        cam(c1.toArray(), pp.toArray(), 5, 28, 'sine');
-        // insert: the screen, from just behind her eyes
-        const face = hp.clone().sub(pp).normalize(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.phone.quaternion), at = pp.clone().addScaledVector(up, 0.018);
-        const ins = at.clone().addScaledVector(face, 0.27).addScaledVector(up, 0.028);
-        D.wait(2.6).then(() => {
-          weng.head.visible = false; // the camera is where her eyes are
-          rig.set({ pos: ins.toArray(), look: at.toArray(), fov: 30 });
-          rig.move({ pos: at.clone().addScaledVector(face, 0.24).addScaledVector(up, 0.022).toArray(), look: at.toArray(), fov: 30, dur: 4, e: 'sine' });
-          E.dof({ target: this.phone, aperture: 0.0009, maxblur: 0.003 }); E.bloom.strength = 0.03;
-        });
+        rig.move({ pos: c1.toArray(), look: pp.toArray(), fov: 26, dur: 6.2, e: 'sine' });
       }
       await D.say('', "Sa break, nakita mo siyang nagte-text: \"Anak, sa Sabado na lang 'yung pambili ng project mo ha.\"", { hold: 6.4 });
       D.patak('Ate Weng', '₱500 ang ikinaltas');
@@ -566,7 +604,8 @@ export default {
     const rig = this.engine.rig, E = this.engine, weng = this.weng;
     this.joy.root.position.set(2.6, 0, 3);
     this.mark.root.position.set(1.4, 0, -1.7); this.mark.root.rotation.y = PI; this.mark.pose('bothHands', true);
-    this.phone.visible = false; this.slip.visible = false; this.pen.visible = false; this.receipt.visible = false;
+    this.phone.visible = false; this.slip.visible = false; this.pen.visible = false;
+    this.joy.reach('L', null, { rate: 30 }); this.joy.reach('R', null, { rate: 30 });
     weng.root.position.set(-0.95, 0, -0.9); weng.root.rotation.y = 0.1; weng.pose('standRelaxed', true);
     weng.set({ shL: [-30, 0, 6], elL: [-60, 0, 0], shR: [-30, 0, -6], elR: [-60, 0, 0], neck: [14, 0, 0] }, true); weng.expression({});
     weng.look(this.pos1, 0.6);

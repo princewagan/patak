@@ -15,9 +15,11 @@ import { animate, walkPath } from '../engine/tween.js';
   origin it is exactly the photograph. Everything nearer than the photo is real 3D: a lane that opens onto the
   flooded street, so the walk ends with the camera almost at the spot the photo was taken from.
 
-  The people in the photo itself (umbrellas, motorbike) are the real people. The 3D ones are dressed after the
-  three behind us in IMG_6462, so Sir recognizes them in the slideshow. Faces stay generic on purpose: the real
-  faces are blurred in the public files.
+  The people in the photo itself (umbrellas, motorbike) are the real people. The 3D ones are the three behind us in
+  IMG_6462, dressed as they were: the mom from the house (white tee, navy pants, black umbrella) who did most of the
+  talking, and two neighbours from two other houses (an older man in a grey-violet shirt; a man in a blue NY cap,
+  black trefoil tee and black shorts, arms crossed). Faces stay generic on purpose: the real faces are blurred in the
+  public files. Keira and Prince are not in this scene: until the story turns into ours, the one walking is Sir.
 */
 const PI = Math.PI;
 const PITCH = -7.4 * PI / 180, SCALE = 0.85;
@@ -382,15 +384,13 @@ export function sedan() {
   return { group: G, door, time };
 }
 
-/** Keira's own forearm, first person. reach() and press() take world positions. Used by car.js too. */
-export function povArm() {
+/** your own forearm, first person. reach() and press() take world positions. Used by car.js and jeep.js too. */
+export function povArm({ left = false } = {}) {
   const skin = new THREE.MeshPhysicalMaterial({ color: 0xa98a78, roughness: 0.55, sheen: 0.25, sheenColor: new THREE.Color(0xff9a7a) });
   const G = new THREE.Group(), fore = new THREE.Group(); G.add(fore);
   const pts = []; for (let i = 0; i <= 14; i++) { const t = i / 14; pts.push(new THREE.Vector2(0.024 + 0.024 * Math.sin(Math.min(1, t * 1.5) * PI / 2) + (t > 0.7 ? (t - 0.7) * 0.03 : 0), t * 0.62)); }
   const lm = new THREE.Mesh(new THREE.LatheGeometry(pts, 20), skin); lm.scale.z = 0.8; lm.castShadow = true; fore.add(lm);
-  // black bead bracelet (hers, in IMG_6493)
-  const bead = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.005, 8, 26), std(0x0b0b0c, { rough: 0.35 })); bead.position.y = 0.03; bead.rotation.x = PI / 2; bead.scale.y = 0.8; fore.add(bead);
-  const hand = new THREE.Mesh(handGeometry().R, skin); hand.scale.setScalar(1.08); hand.castShadow = true; G.add(hand);
+  const hand = new THREE.Mesh(left ? handGeometry().L : handGeometry().R, skin); hand.scale.setScalar(1.08); hand.castShadow = true; G.add(hand);
   G.visible = false;
   const _d = new THREE.Vector3(), _q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
   G.reach = (wrist, elbow, roll = 0) => {
@@ -506,7 +506,7 @@ export default {
 
     // ---- the car ----
     const car = this.car = sedan();
-    car.group.position.set(-0.3, roadY(9.5) + 0.0, 9.5); car.group.rotation.x = -Math.atan(0.1); S.add(car.group);
+    car.group.position.set(-0.3, roadY(9.5) + 0.0, 9.5); car.group.rotation.x = Math.atan(0.1); car.group.scale.z = -1; S.add(car.group);
     this.carDoor = car.door; this.carTime = car.time;
 
     // ---- people ----
@@ -516,30 +516,22 @@ export default {
       const sh = blob(0.42, 0.55); sh.position.set(x, p.root.position.y + 0.012, z); S.add(sh); p.shadow = sh; return p;
     };
     const P = this.P = {};
-    // Prince: light blue tee, dark lanyard (IMG_6462, IMG_6476)
-    P.prince = person({ real: 'prince', h: 1.91, skin: 0xb8917a, top: 0x7ba6cf, bottom: 0x1d2024, hair: 'messy', build: 0.95, sleeve: 0.14 }, 1.1, 7.0, PI + 0.5);
-    const lan = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.007, 5, 24), std(0x1b2440)); lan.position.set(0, 0.26, 0.09); lan.scale.set(0.8, 1.35, 0.42); P.prince.chest.parent.add(lan);
-    // the three behind us in IMG_6462
-    P.tatay = person({ real: 'driver', h: 1.8, skin: 0x8f6d58, top: 0x6f6a72, bottom: 0x3a3a3e, hair: 'short', hairColor: 0x77726a, build: 0.88, sleeve: 0.13, collar: true, slippers: true }, -1.42, -1.1, PI - 0.2, true);
+    const nyLogo = canvasTex(128, 112, (c, w, h) => { c.clearRect(0, 0, w, h); c.fillStyle = '#eef1f5'; c.font = 'bold 84px Georgia, serif'; c.textAlign = 'center'; c.fillText('N', w / 2 - 14, 86); c.fillText('Y', w / 2 + 18, 96); });
+    // the older man, closest to the water
+    P.tatay = person({ real: 'tatay', h: 1.8, build: 0.9 }, -1.42, -1.1, PI - 0.2, true);
     P.tatay.set({ shL: [2, 0, 7], shR: [2, 0, -7], neck: [4, 0, 0] }, true);
-    P.kuya = person({ real: 'mark', h: 1.93, skin: 0xa98068, top: 0x101114, bottom: 0x121316, hair: 'short', cap: 0x274a86, build: 1.22, belly: true, shorts: true, slippers: true, sleeve: 0.13, print: leafPrint(), printSize: [0.2, 0.15] }, 2.75, 3.15, -0.75);
-    P.kuya.set({ shL: [-24, 0, 20], shR: [-36, 0, -20], elL: [-104, 0, -66], elR: [-100, 0, 64] }, true);
-    P.ate = person({ real: 'commuter', h: 1.75, skin: 0xa98068, top: 0xd6d4ce, bottom: 0x1a2238, hair: 'bun', build: 0.92, sleeve: 0.12, slippers: true }, 1.7, -1.9, PI + 0.32);
-    P.ate.set({ shR: [-34, 0, -6], elR: [-82, 0, 8] }, true);
+    // the man in the cap, on the right by his house, arms folded
+    P.kuya = person({ real: 'kuya', h: 1.93, build: 1.18, cap: 0x2b4f8f, capOpts: { logo: nyLogo, size: 1.05 } }, 2.75, 3.15, -0.75);
+    { const k = P.kuya, v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
+      k.reach('L', () => k.chest.localToWorld(v1.set(-0.11, -0.13, 0.17)), { rate: 30, pole: [1, -0.6, -0.2] });
+      k.reach('R', () => k.chest.localToWorld(v2.set(0.12, -0.1, 0.21)), { rate: 30, pole: [-1, -0.6, -0.2] }); }
+    // the mom, under her black umbrella, one arm folded across under the other
+    P.ate = person({ real: 'nanay', h: 1.75, build: 0.92 }, 1.55, -1.7, PI + 0.32);
+    { const a = P.ate, v1 = new THREE.Vector3(); this.ateHand = new THREE.Vector3();
+      a.reach('R', () => a.chest.localToWorld(this.ateHand.set(-0.02, -0.05, 0.25)), { rate: 30, pole: [-1, -1, -0.4], wrist: [0, -40, 0] });
+      a.reach('L', () => a.chest.localToWorld(v1.set(-0.09, -0.17, 0.19)), { rate: 30, pole: [1, -0.6, -0.2] }); }
     this.ateU = umbrella(0x101114); S.add(this.ateU);
-    // neighbors along the lane, out of their doors, all looking down at the water
-    P.gate = person({ real: 'tindera', h: 1.72, skin: 0xa98068, top: 0x8e5a6a, bottom: 0x2b2f38, hair: 'long', build: 1.05, sleeve: 0.12, slippers: true }, -2.7, 3.35, PI - 0.5, true);
-    P.gate.set({ shL: [0, 0, 8], shR: [-20, 0, -6], elR: [-70, 0, 0] }, true);
-    P.gate2 = person({ real: 'boy', h: 1.42, skin: 0xa98068, top: 0xc9b24a, bottom: 0x23324a, hair: 'short', build: 0.9, sleeve: 0.1, shorts: true, slippers: true }, -2.35, 2.9, PI - 0.35, true);
-    P.door = person({ real: 'driver', h: 1.84, skin: 0x8f6d58, top: 0x4e5a44, bottom: 0x2a2520, hair: 'short', build: 1.0, sleeve: 0.13, shorts: true, slippers: true }, 2.95, -0.1, PI + 0.45);
-    P.door.set({ spine: [3, 0, 0] }, true);
-    P.door2 = person({ real: 'tindera', h: 1.68, skin: 0x8f6d58, top: 0xb9b2a6, bottom: 0x4a3b34, hair: 'bun', hairColor: 0x3b3733, build: 1.08, sleeve: 0.12, slippers: true }, 2.6, 0.75, PI + 0.3);
-    P.door2.set({ shL: [-24, 0, 16], shR: [-34, 0, -16], elL: [-104, 0, -62], elR: [-100, 0, 60] }, true);
-    // Keira: black tank top, long wet hair (IMG_6462). We only step out of her eyes once, to watch her go up to him.
-    P.keira = person({ real: 'keira', h: 1.72, skin: 0xb8917a, top: 0x0d0e10, bottom: 0x16181c, hair: 'long', tank: true, build: 0.98, slippers: true }, -0.24, 1.25, PI);
-    P.keira.root.visible = false; P.keira.shadow.visible = false;
     for (const p of this.people) p.shade(0.74);
-    P.tatay.skinMat.color.multiplyScalar(0.62);                                  // the one face we get near: keep it low
 
     this.rain = new Rain({ count: 12000, size: [14, 9, 18], speed: 9, opacity: 0.55, wind: [0.2, 0.6] }); S.add(this.rain.mesh);
     this.arm = povArm(); S.add(this.arm);
@@ -551,8 +543,8 @@ export default {
     this.camPath = null; this.camK = 0; this.travel = 0; this.steps = 0; this.stride = 0; this.view = null;
 
     // compile every material during the loading screen, so nothing hitches when this scene first appears
-    const r = engine.renderer; this.P.keira.root.visible = true; r.setRenderTarget(engine.composer.renderTarget1);
-    const done = r.compileAsync(S, engine.camera); r.setRenderTarget(null); await done; this.P.keira.root.visible = false;
+    const r = engine.renderer; r.setRenderTarget(engine.composer.renderTarget1);
+    const done = r.compileAsync(S, engine.camera); r.setRenderTarget(null); await done;
   },
 
   enter(engine) {
@@ -578,7 +570,7 @@ export default {
     }
     // the road slopes, walkers follow it
     // the umbrella stays upright in Ate's hand
-    _v.set(0, -0.085, 0.01); P.ate.arm.R.wr.localToWorld(_v);
+    _v.copy(this.ateHand);
     this.ateU.position.set(_v.x, _v.y - 0.3, _v.z); this.ateU.rotation.set(Math.sin(t * 0.8) * 0.025, 0, -0.04 + Math.sin(t * 0.63) * 0.025);
     // first-person walk: the camera rides a path with a real step in it
     if (this.camPath) {
@@ -609,13 +601,13 @@ export default {
     await D.wait(0.5);
     const arm = this.arm, door = this.carDoor, out = new THREE.Vector3(-1, 0, 0), wrist = new THREE.Vector3(), el = new THREE.Vector3(), dq = new THREE.Quaternion(), hq = new THREE.Quaternion();
     // in door space: palm toward the door, fingers up and a little toward the hinge
-    const X = new THREE.Vector3(1, 0, 0), F = new THREE.Vector3(0, 0.93, 0.37).normalize(), Y = F.clone().negate(), Z = X.clone().cross(Y);
+    const X = new THREE.Vector3(1, 0, 0), F = new THREE.Vector3(0, 0.93, -0.37).normalize(), Y = F.clone().negate(), Z = X.clone().cross(Y);
     const hand0 = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
     const hold = (rest = 0) => {
       wrist.copy(door.press).addScaledVector(out, 0.055); door.localToWorld(wrist);
       el.set(0.42, -0.72, 0.02).applyQuaternion(E.camera.quaternion).add(E.camera.position);
       if (rest) wrist.lerp(_v.copy(el).add(new THREE.Vector3(-0.02, -0.34, -0.04)), rest);
-      door.getWorldQuaternion(dq); hq.copy(dq).multiply(hand0);
+      hq.copy(hand0);
       arm.press(wrist, el, hq);
     };
     hold(1); arm.visible = true;
@@ -628,20 +620,18 @@ export default {
     arm.visible = false;
 
     // ---- turn around: the lane, the people, and at the bottom of it the water ----
-    const road = (x, z) => [x, roadY(z), z];
-    const pw = walkPath(P.prince, [road(0.45, 6.0), road(-0.4, 4.2), road(0.05, 1.6), road(0.2, -1.85)], 1.25).then(() => { P.prince.turnTo = PI + 0.05; P.prince.look(this.jeep, 0.7); });
     P.kuya.look(E.camera, 0.7);
     animate(k => { this.view.yaw = this.A_YAW * (1 - k) - 0.03 * k; this.view.pitch = this.A_PITCH * (1 - k) - 0.1 * k; rig.fov = 44 - 4 * k; }, 2.5, 'inOut');
     await D.wait(0.9);
     this.stride = 1;
     D.stamp('<b>2:57 PM</b>Brgy. Del Monte, Quezon City', 5);
-    animate(k => { this.camK = k; }, 10.5, 'sine').then(() => { this.stride = 0; });
-    await D.say('', 'Bumaba kami. Ang daming tao sa labas. Taga-roon sila.', { hold: 4.6 });
+    const walk1 = animate(k => { this.camK = k; }, 10.5, 'sine').then(() => { this.stride = 0; });
+    await D.say('', 'Bumaba ka. May mga tao sa labas. Taga-roon sila.', { hold: 4.6 });
     audio.murmur(0.45);
-    P.gate.look(this.jeep, 0.8); P.gate2.look(this.jeep, 0.8);
+    P.ate.look(this.jeep, 0.8);
     await D.wait(3.8);
     P.kuya.look(this.jeep, 0.8);
-    await Promise.all([pw, D.wait(2.3)]);
+    await Promise.all([walk1, D.wait(1.0)]);
     this.view = null; this.camPath = null;
     rig.roll = 0;
 
@@ -650,45 +640,41 @@ export default {
     P.tatay.set({ shR: [-68, 0, -10], elR: [-10, 0, 0] });              // he points at the jeep
     P.tatay.look(this.jeep, 0.9);
     await D.wait(0.7);
+    P.tatay.talking = true;
     await D.say('Kapitbahay', "Kawawa naman 'yung driver.");
     P.tatay.set({ shR: [2, 0, -7], elR: [-8, 0, 0] });
-    P.ate.look(P.door.head, 0.5);
     await D.say('Kapitbahay', "Hindi niya nailabas 'yung jeep. Hindi niya kasi alam.");
+    P.tatay.talking = false;
     await D.wait(0.7);
 
-    // ---- do we say something? ----
-    P.prince.look(E.camera, 0.6);
-    await rig.move({ look: [0.3, -0.5, -3], dur: 1.5, fov: 36 });
-    await D.say('', 'Kakausapin ba namin sila?', { hold: 2.6 });
-    P.prince.look(this.jeep, 0.7);
+    // ---- do you say something? ----
+    await rig.move({ look: [1.5, -0.55, -1.7], dur: 1.6, fov: 38 });
+    await D.say('', 'Kakausapin mo ba sila?', { hold: 2.6 });
 
-    // ---- Keira does. For once we see her: over her shoulder, the way we'd have seen it from the side ----
-    await D.black(true, 0.35);
-    const K = P.keira, ky = z => roadY(z);
-    K.root.visible = true; K.shadow.visible = true; K.root.position.set(0.1, ky(1.5), 1.5); K.root.rotation.y = -2.6;
-    this.P.prince.look(K.head, 0.6);
-    rig.set({ pos: [0.95, -0.42, 2.7], look: [-0.5, -0.6, -0.6], fov: 40, roll: 0 });
-    rig.move({ pos: [0.42, -0.32, 0.86], look: [-1.25, -0.42, -2.0], fov: 38, dur: 3.8, e: 'sine' });
-    const kw = walkPath(K, [[-0.92, ky(-0.22), -0.22]], 1.0);
-    await D.black(false, 0.35);
-    await D.say('', 'Si Keira ang unang lumapit at nagtanong.', { hold: 3 });
-    await kw;
-    // he half turns, glances at her, and goes back to watching the water while he answers
-    await animate(k => { P.tatay.root.rotation.y = PI - 0.2 - 0.55 * k; }, 1.2, 'inOut');
-    P.tatay.look(K.head, 0.6);
-    await D.wait(0.9);
-    P.tatay.look(this.jeep, 0.8);
-    await D.wait(0.3);
+    // ---- you go up to her ----
+    const from = rig.pos.clone(), to = new THREE.Vector3(0.82, roadY(-0.95) + 1.46, -0.95);
+    this.camPath = new THREE.CatmullRomCurve3([from, from.clone().lerp(to, 0.5).add(new THREE.Vector3(0.1, 0, 0.1)), to]);
+    this.view = { yaw: Math.atan2(1.55 - from.x, -(-1.7 - from.z)), pitch: -0.08 }; this._cp = null; this.stride = 1;
+    const walk2 = animate(k => { this.camK = k; this.view.yaw = Math.atan2(1.55 - rig.pos.x, rig.pos.z + 1.7); }, 3.2, 'sine').then(() => { this.stride = 0; });
+    await D.wait(1.4);
+    P.ate.look(E.camera, 0.9);
+    await animate(k => { P.ate.root.rotation.y = PI + 0.32 - 0.62 * k; }, 1.4, 'inOut');
+    await walk2;
+    this.view = null; this.camPath = null;
+    rig.move({ look: [1.5, -0.42, -1.62], dur: 1.2, fov: 38 });
+    await D.wait(0.6);
     await D.ask(['Lagi po bang bumabaha rito?', 'Bakit po walang madaanan palabas?'], async i => {
+      P.ate.talking = true;
       if (i === 0) {
-        P.tatay.anim = (t, p) => { p.neck.rotation.y += Math.sin(t * 4.2) * 0.1; };
+        P.ate.anim = (t, p) => { p.neck.rotation.y += Math.sin(t * 4.2) * 0.08; };
         await D.say('', 'Madalas daw. Pero ito na raw ang pinakamalala.');
-        P.tatay.anim = null;
+        P.ate.anim = null;
       } else {
-        P.tatay.set({ shR: [-66, 0, -14], elR: [-12, 0, 0] });
+        P.ate.look(this.jeep, 0.6);
         await D.say('', 'Mataas daw ang gitna ng village. Lahat ng labasan, pababa.');
-        P.tatay.set({ shR: [2, 0, -7], elR: [-8, 0, 0] });
+        P.ate.look(E.camera, 0.9);
       }
+      P.ate.talking = false;
     });
     await D.wait(0.5);
     await D.black(true, 1.2);

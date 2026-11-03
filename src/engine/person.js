@@ -24,6 +24,7 @@ const SKIN = { light: 0xc08a64, tan: 0xa5714c, brown: 0x8a5a3a, dark: 0x6e4429 }
 const SIT_K = 0.79;   // pose "y" values were written for the old, longer legs
 const IDENTITY = new THREE.Matrix4();
 const TAU = Math.PI * 2;
+const _ikT = new THREE.Vector3(), _ikD = new THREE.Vector3(), _ikN = new THREE.Vector3(), _ikW = new THREE.Vector3(), _ikE = new THREE.Vector3(), _ikP = new THREE.Vector3(), _ikC = new THREE.Vector3(), _ikM = new THREE.Matrix4(), _ikQ = new THREE.Quaternion(), _ikR = new THREE.Quaternion();
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lerp = (a, b, t) => a + (b - a) * t;
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -196,7 +197,9 @@ export class Person {
       root.updateMatrixWorld(true);
       root.traverse(n => { if (n.isMesh && !n.userData.keep) n.visible = false; });
       this.real = new RealBody(this, rec, { ...o.realOpts, role: o.real }); root.add(this.real.group);
-      root.traverse(n => { if (n.userData.keep) { n.scale.multiplyScalar(0.92); n.position.y += hr * 0.02; n.position.z -= hr * 0.06; } });  // the cap, fitted to the real head
+      // the procedural cap never fit a real head: it sat across the face. The real body wears its own.
+      root.traverse(n => { if (n.userData.keep) n.visible = false; });
+      if (o.cap) this.real.wearCap(o.cap, o.capOpts);
     }
   }
 
@@ -236,6 +239,66 @@ export class Person {
 
   expression(e) { Object.assign(this.exprT, { smile: 0, sad: 0, worry: 0 }, e); return this; }
   look(target, amt = 1) { this.lookTarget = target; this.lookAmt = amt; return this; }
+
+  /**
+   * Bring a hand to a point in the world and keep it there: reach('R', target) with a Vector3 or Object3D (or a function
+   * returning one, read every frame), reach('R', null) to let go. The arm is solved each frame, so the hand really arrives,
+   * whatever the body is doing. The weight eases in and out, so it never snaps. o: { rate, w, wrist: [x,y,z] degrees,
+   * pole: [x,y,z] where the elbow should point, in the person's own space }
+   */
+  reach(side, target, o = {}) {
+    const ik = this.ik ??= {}, a = ik[side] ??= { w: 0, goal: 0, off: new THREE.Vector3(), target: null };
+    if (target == null) { a.goal = 0; a.rate = o.rate ?? 6; return this; }
+    a.target = target; a.goal = o.w ?? 1; a.rate = o.rate ?? 6; a.wrist = o.wrist ?? null; a.pole = o.pole ?? null; a.twist = o.twist ?? 0;
+    return this;
+  }
+
+  solveArms(dt) {
+    for (const side of ['L', 'R']) {
+      const a = this.ik[side]; if (!a) continue;
+      a.w += (a.goal - a.w) * (1 - Math.exp(-a.rate * dt));
+      if (a.goal === 0 && a.w < 0.003) { a.w = 0; a.target = null; a.off.set(0, 0, 0); continue; }
+      if (!a.target) continue;
+      const arm = this.arm[side], sp = arm.sh.parent, sx = side === 'L' ? 1 : -1;
+      sp.updateWorldMatrix(true, false);
+      const raw = typeof a.target === 'function' ? a.target() : a.target;
+      const tw = _ikT; if (raw.isVector3) tw.copy(raw); else raw.getWorldPosition(tw);
+      a.world = (a.world ??= new THREE.Vector3()).copy(tw);
+      _ikM.copy(sp.matrixWorld).invert();
+      const d = _ikD.copy(tw).applyMatrix4(_ikM).add(a.off).sub(arm.sh.position);
+      const ua = -arm.el.position.y, fa = -arm.wr.position.y, reach = (ua + fa) * 0.985;
+      const L = THREE.MathUtils.clamp(d.length(), Math.abs(ua - fa) + 0.02, reach);
+      const e = Math.PI - Math.acos(clamp((ua * ua + fa * fa - L * L) / (2 * ua * fa), -1, 1));
+      const dir = _ikN.copy(d).normalize();
+      const w0 = _ikW.set(0, -ua - fa * Math.cos(e), fa * Math.sin(e)).normalize();
+      const q = _ikQ.setFromUnitVectors(w0, dir);
+      // swing the elbow round the shoulder-to-hand line until it points where an elbow would: down and out
+      const el = _ikE.set(0, -1, 0).applyQuaternion(q), po = _ikP.set(...(a.pole || [sx * 0.75, -1, -0.35]));
+      el.addScaledVector(dir, -el.dot(dir)); po.addScaledVector(dir, -po.dot(dir));
+      if (el.lengthSq() > 1e-6 && po.lengthSq() > 1e-6) {
+        el.normalize(); po.normalize();
+        const ang = Math.atan2(_ikC.copy(el).cross(po).dot(dir), el.dot(po));
+        q.premultiply(_ikR.setFromAxisAngle(dir, ang));
+      }
+      arm.sh.quaternion.slerp(q, a.w);
+      arm.el.rotation.x += (-e - arm.el.rotation.x) * a.w; arm.el.rotation.y += (D(a.twist) - arm.el.rotation.y) * a.w; arm.el.rotation.z *= 1 - a.w;
+      if (a.wrist) { const w = arm.wr.rotation; w.x += (D(a.wrist[0]) - w.x) * a.w; w.y += (D(a.wrist[1]) - w.y) * a.w; w.z += (D(a.wrist[2]) - w.z) * a.w; }
+    }
+  }
+
+  /** the scanned arm is not quite the puppet's length: nudge the aim by what's left over, so the visible hand lands on the spot */
+  settleArms() {
+    for (const side of ['L', 'R']) {
+      const a = this.ik[side]; if (!a || !a.world || a.w < 0.5) continue;
+      const hand = this.real.hand[side]; hand.updateWorldMatrix(true, false);
+      const err = _ikD.copy(a.world).sub(_ikT.setFromMatrixPosition(hand.matrixWorld));
+      const sp = this.arm[side].sh.parent;
+      _ikQ.setFromRotationMatrix(_ikM.extractRotation(sp.matrixWorld)).invert();
+      err.applyQuaternion(_ikQ);
+      a.off.addScaledVector(err, 0.3);
+      if (a.off.length() > 0.14) a.off.setLength(0.14);
+    }
+  }
 
   /** where the ankle is for a leg at gait phase f (0 = heel strike, 0..duty = on the ground). Writes this.g */
   footAt(f, L, g) {
@@ -372,7 +435,8 @@ export class Person {
     for (const e of this.eyes) e.scale.y = lid;
 
     if (this.anim) this.anim(t, this, dt);
-    this.real?.sync();
+    if (this.ik) this.solveArms(dt);
+    if (this.real) { this.real.sync(); if (this.ik) this.settleArms(); }
   }
 }
 
@@ -384,6 +448,8 @@ const POSES = {
   sit: { y: -0.43, hpL: [-88, 0, 3], hpR: [-88, 0, -3], knL: [88, 0, 0], knR: [88, 0, 0], shL: [-8, 0, 6], shR: [-8, 0, -6], elL: [-48, 0, 0], elR: [-48, 0, 0] },
   sitSlump: { y: -0.44, spine: [16, 0, 0], neck: [20, 0, 0], hpL: [-84, 0, 3], hpR: [-84, 0, -3], knL: [84, 0, 0], knR: [84, 0, 0], shL: [-20, 0, 4], shR: [-20, 0, -4], elL: [-58, 0, 0], elR: [-58, 0, 0] },
   crouch: { y: -0.5, spine: [30, 0, 0], neck: [-10, 0, 0], hpL: [-118, 0, 10], hpR: [-110, 0, -10], knL: [140, 0, 0], knR: [138, 0, 0], anL: [-20, 0, 0], anR: [-22, 0, 0], shL: [-50, 0, 10], shR: [-60, 0, -8], elL: [-30, 0, 0], elR: [-40, 0, 0] },
+  // kneeling and sitting back on the heels: how you get down to someone's shoes in a narrow aisle
+  kneelDown: p => { const s = p.s, C = p.C, hip = 0.075 * s + p.l2 * 0.34; return { y: (hip + (C.hipsY - C.hipJ) * s - C.hipsY * s) / SIT_K, spine: [40, 0, 0], neck: [18, 0, 0], hpL: [-62, 0, 9], hpR: [-62, 0, -9], knL: [150, 0, 0], knR: [150, 0, 0], anL: [30, 0, 0], anR: [30, 0, 0], shL: [-14, 0, 10], elL: [-70, 0, 0], shR: [-30, 0, -8], elR: [-30, 0, 0] }; },
   reachR: { shR: [-72, 0, -6], elR: [-12, 0, 0], spine: [4, 0, 0] },
   reachL: { shL: [-72, 0, 6], elL: [-12, 0, 0], spine: [4, 0, 0] },
   holdL: { shL: [-14, 0, 8], elL: [-88, 0, 0] },

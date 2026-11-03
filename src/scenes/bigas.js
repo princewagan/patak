@@ -7,6 +7,7 @@ import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
 import { billMesh, pesoCoin } from '../engine/money.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
+import { povArm } from './labas.js';
 
 const PI = Math.PI;
 
@@ -81,14 +82,24 @@ function tvScreen() {
 
 function riceBag(scale = 1) {
   const g = new THREE.Group();
-  const bag = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.35, transparent: true, opacity: 0.88 }));
-  bag.scale.set(1, 1.35, 0.85); g.add(bag);
-  const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 8), bag.material); knot.position.y = 0.11; g.add(knot);
+  const riceT = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#e4ddcb'; c.fillRect(0, 0, w, h); for (let i = 0; i < 2600; i++) { const v = 200 + Math.random() * 50; c.fillStyle = `rgb(${v},${v - 6},${v - 22})`; c.save(); c.translate(Math.random() * w, Math.random() * h); c.rotate(Math.random() * 3); c.fillRect(-3, -1.2, 6, 2.4); c.restore(); } });
+  riceT.wrapS = riceT.wrapT = THREE.RepeatWrapping; riceT.repeat.set(3, 2);
+  const V = (x, y) => new THREE.Vector2(x, y);
+  // the rice inside: a soft sack shape, flat on the bottom
+  const fill = new THREE.Mesh(new THREE.LatheGeometry([V(0, 0), V(0.055, 0.002), V(0.068, 0.02), V(0.07, 0.06), V(0.064, 0.1), V(0.045, 0.13), V(0.016, 0.145), V(0, 0.147)], 28), new THREE.MeshStandardMaterial({ map: riceT, roughness: 0.85 }));
+  fill.scale.z = 0.86; g.add(fill);
+  // the plastic over it, a touch bigger, with the twisted neck and the knot
+  const plastic = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.18, transparent: true, opacity: 0.32, side: THREE.DoubleSide, clearcoat: 1, clearcoatRoughness: 0.15 });
+  const skin = new THREE.Mesh(new THREE.LatheGeometry([V(0, -0.001), V(0.058, 0.001), V(0.072, 0.02), V(0.074, 0.06), V(0.068, 0.1), V(0.048, 0.135), V(0.014, 0.16), V(0.009, 0.185), V(0.012, 0.2)], 28), plastic);
+  skin.scale.z = 0.88; g.add(skin);
+  const knot = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.005, 6, 12), plastic); knot.position.y = 0.19; knot.rotation.x = 1.2; g.add(knot);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.04, 6, 1, true), plastic); tail.position.set(0.006, 0.215, 0); tail.rotation.z = -0.4; g.add(tail);
   g.scale.setScalar(scale); g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
 
 export default {
+  ao: true,   // contact shadows (see Engine)
   dof: { focus: 1.05, aperture: 0.004, maxblur: 0.008 },
   grade: { lift: [0.006, 0.004, 0.002], gain: [1.04, 0.97, 0.86], sat: 0.48, grain: 0.08, bloom: 0.36, bloomThreshold: 0.82, exposure: 1.12, vignette: 1.0, black: 0.025, gamma: 1.24, curve: 0.5 },
 
@@ -200,7 +211,15 @@ export default {
     const palette = [0xb8211e, 0xe0b23a, 0x1f5fb0, 0x2a8a4a, 0xe9e4d8, 0x8a2f6b, 0xd86a1f, 0x222222];
     for (const [type, geo, h] of [['can', canG, 0.11], ['bottle', bottleG, 0.24], ['box', boxG, 0.14]]) {
       const list = items.filter(i => i.it === type);
-      const im = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: type === 'can' ? 0.35 : 0.5, metalness: type === 'can' ? 0.6 : 0 }), list.length);
+      // printed labels: light where the print is, so each instance colour still tints it like a different brand
+      const label = canvasTex(256, 256, (g, w, hh) => {
+        const band = (y0, y1, col) => { g.fillStyle = col; g.fillRect(0, y0 * hh, w, (y1 - y0) * hh); };
+        if (type === 'can') { band(0, 1, '#d8d8d8'); band(0, 0.08, '#f4f4f4'); band(0.92, 1, '#f4f4f4'); band(0.3, 0.42, '#ffffff'); band(0.5, 0.56, '#555'); }
+        else if (type === 'bottle') { band(0, 1, '#7a7a7a'); band(0, 0.1, '#f0f0f0'); band(0.38, 0.68, '#f6f6f6'); band(0.47, 0.53, '#444'); }
+        else { band(0, 1, '#d0d0d0'); band(0, 0.16, '#ffffff'); band(0.62, 0.86, '#f8f8f8'); }
+        g.fillStyle = 'rgba(30,30,30,0.55)'; for (let i = 0; i < 9; i++) g.fillRect(28 + i * 22, (type === 'box' ? 0.7 : 0.33) * hh, 12, 0.04 * hh);
+      });
+      const im = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ map: label, roughness: type === 'can' ? 0.32 : type === 'bottle' ? 0.22 : 0.6, metalness: type === 'can' ? 0.55 : 0, envMapIntensity: type === 'box' ? 0.6 : 1.4 }), list.length);
       const m4 = new THREE.Matrix4(), c = new THREE.Color();
       list.forEach((i, k) => { m4.makeTranslation(i.x, i.y + 0.015 + h / 2, i.z); im.setMatrixAt(k, m4); im.setColorAt(k, c.setHex(palette[Math.floor(r() * palette.length)])); });
       im.castShadow = true; im.receiveShadow = true; S.add(im);
@@ -258,40 +277,54 @@ export default {
       const V = (x, y) => new THREE.Vector2(x, y), sc = lola.H / 1.7;
       const shawl = new THREE.Mesh(new THREE.LatheGeometry([V(0.046, 0.16), V(0.052, 0.12), V(0.062, 0.08), V(0.09, 0.045), V(0.15, -0.0), V(0.19, -0.06), V(0.205, -0.15), V(0.2, -0.27)].map(v => v.multiplyScalar(sc)), 28),
         new THREE.MeshStandardMaterial({ color: 0x6b5f4f, roughness: 0.97, normalMap: clothN, side: THREE.DoubleSide }));
-      shawl.scale.z = 0.8; shawl.castShadow = true; shawl.position.y = 0.1 * sc; lola.chest.add(shawl);
+      shawl.scale.z = 0.8; shawl.castShadow = true; shawl.position.y = 0.1 * sc; if (!lola.real) lola.chest.add(shawl);
     }
     lola.root.position.set(0.02, 0, 0.74); lola.root.rotation.y = PI; lola.pose('stoop', true); S.add(lola.root); this.people.push(lola);
-    const purse = box(0.09, 0.06, 0.03, std(0x7a2d3a, { rough: 0.6 }), 0.012); purse.position.set(0, -0.08, 0.025); lola.arm.R.wr.add(purse); this.purse = purse;
+    // Lola's coin purse, held in front of her in both hands
+    const purse = this.purse = new THREE.Group();
+    purse.add(at(box(0.1, 0.065, 0.032, std(0x7a2d3a, { rough: 0.6 }), 0.014), 0, 0, 0));
+    purse.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 16, PI), std(0xb8a77a, { metal: 0.8, rough: 0.3 })), 0, 0.033, 0));
+    lola.spine.add(purse); purse.position.set(0, 0.02, 0.21); purse.rotation.x = 0.3;
+    this.purseL = new THREE.Object3D(); this.purseL.position.set(0.055, -0.02, -0.03); purse.add(this.purseL);
+    this.purseR = new THREE.Object3D(); this.purseR.position.set(-0.055, -0.02, -0.03); purse.add(this.purseR);
     const tindera = this.tindera = new Person({ real: 'tindera', h: 1.56, skin: 'tan', top: 0xb47f78, bottom: 0xb47f78, skirt: true, hair: 'bun', build: 1.12, belly: true });
     tindera.root.position.set(0.02, 0, -0.48); tindera.pose('standRelaxed', true); S.add(tindera.root); this.people.push(tindera);
-    const lista = box(0.12, 0.17, 0.012, std(0x2f4f8f, { rough: 0.6 })); lista.position.set(0, -0.09, 0.03); lista.visible = false; tindera.arm.R.wr.add(lista); this.lista = lista;
+    // her lista, the notebook of who owes what, lying on her side of the counter
+    const lista = this.lista = new THREE.Group(); lista.position.set(-0.32, LEDGE + 0.008, -0.3); lista.rotation.y = 0.25; S.add(lista);
+    lista.add(at(box(0.15, 0.012, 0.2, std(0x2f4f8f, { rough: 0.6 })), 0, 0, 0));
+    lista.add(at(box(0.142, 0.013, 0.19, std(0xe9e4d6, { rough: 0.9 })), 0.004, 0.0005, 0));
+    // the tin she keeps the coins in
+    const lata = this.lata = new THREE.Group(); lata.position.set(0.32, LEDGE, -0.3); S.add(lata);
+    lata.add(at(cyl(0.05, 0.05, 0.1, std(0xa9aeb2, { metal: 0.8, rough: 0.35 }), 20), 0, 0.05, 0));
+    lata.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.003, 6, 24), std(0x8a8f93, { metal: 0.8, rough: 0.3 })), 0, 0.1, 0, 0, PI / 2));
     S.add(at(blob(0.3, 0.55), 0.02, 0.004, 0.74));
 
-    // coins Lola counts out on the ledge (₱40: three ₱10 + two ₱5)
+    // coins Lola counts out on the ledge (₱40: three ₱10 + two ₱5); they start in her purse
     this.ledgeCoins = [];
-    [[-0.12, 0.2, 0.0135], [-0.08, 0.17, 0.0135], [-0.04, 0.215, 0.0135], [0.0, 0.18, 0.012], [0.04, 0.205, 0.012]].forEach(([x, z, rr]) => {
-      const c = pesoCoin(rr > 0.013 ? 10 : 5); c.position.set(x, LEDGE + 0.002, z); c.visible = false; S.add(c); this.ledgeCoins.push(c);
+    [[-0.12, 0.2, 10], [-0.08, 0.17, 10], [-0.04, 0.215, 10], [0.0, 0.18, 5], [0.04, 0.205, 5]].forEach(([x, z, v]) => {
+      const c = pesoCoin(v); c.position.set(x, LEDGE + 0.0015, z); c.userData.home = c.position.clone(); c.visible = false; S.add(c); this.ledgeCoins.push(c);
     });
-    this.myCoin = pesoCoin(20); this.myCoin.position.set(0.1, LEDGE + 0.002, 0.2); this.myCoin.visible = false; S.add(this.myCoin);
+    this.myCoins = [pesoCoin(20), pesoCoin(10)]; this.myCoins.forEach((c, i) => { c.position.set(0.1 + i * 0.035, LEDGE + 0.0015, 0.2); c.userData.home = c.position.clone(); c.visible = false; S.add(c); });
     // rice bags + your pancit canton on the ledge
-    this.bagFull = riceBag(1); this.bagHalf = riceBag(0.72);
+    this.bagFull = riceBag(1); this.bagHalf = riceBag(0.8);
     for (const b of [this.bagFull, this.bagHalf]) { b.visible = false; S.add(b); }
     const canton = this.canton = new THREE.Group();
     canton.add(at(box(0.11, 0.025, 0.14, new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3, map: canvasTex(128, 160, (c, w, h) => { c.fillStyle = '#e8b21b'; c.fillRect(0, 0, w, h); c.fillStyle = '#b5121b'; c.fillRect(0, 40, w, 60); c.fillStyle = '#fff'; c.font = 'bold 22px Inter'; c.textAlign = 'center'; c.fillText('PANCIT', w / 2, 66); c.fillText('CANTON', w / 2, 90); }) })), 0, 0.013, 0));
     const egg = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 10), std(0xe8d6b8, { rough: 0.5 })); egg.scale.y = 1.3; egg.position.set(0.09, 0.03, 0); canton.add(egg);
     canton.position.set(0.12, LEDGE, 0.14); canton.rotation.y = 0.3; canton.visible = false; S.add(canton);
 
-    // ---------- your held things (camera-held props, no arms) ----------
+    // ---------- your hand and your wallet (first person) ----------
     this.held = new THREE.Group(); S.add(this.held);
+    this.arm = povArm(); this.held.add(this.arm);
     const wallet = this.wallet = new THREE.Group();
     const leather = new THREE.MeshStandardMaterial({ color: 0x3b2a1f, roughness: 0.55, normalMap: pbr('leather_red_03', { noDiff: true }).normalMap });
-    wallet.add(at(box(0.11, 0.004, 0.09, leather, 0.002), 0, 0, 0));
-    const bill = billMesh(100, 0.1);
-    bill.rotation.x = -PI / 2 + 0.25; bill.position.set(0, 0.015, -0.01); wallet.add(bill);
-    for (let i = 0; i < 4; i++) { const c = pesoCoin(i % 2 ? 10 : 5); c.position.set(-0.03 + i * 0.02, 0.005, 0.025); wallet.add(c); }
-    wallet.position.set(0.04, -0.12, -0.48); wallet.rotation.set(0.85, 0.15, 0); wallet.visible = false; this.held.add(wallet);
-    this.heldCoin = pesoCoin(20); this.heldCoin.rotation.set(1.3, 0, 0.2); this.heldCoin.position.set(0.04, -0.09, -0.3); this.heldCoin.visible = false; this.held.add(this.heldCoin);
-    const coinL = new THREE.PointLight(0xffb070, 0.06, 0.8, 2); coinL.position.set(0, 0.05, -0.2); this.held.add(coinL);
+    // an open bifold: the back half, the bill pocket, the front half folded back a little
+    wallet.add(at(box(0.11, 0.09, 0.006, leather, 0.003), 0, 0, 0));
+    const flap = at(box(0.11, 0.09, 0.005, leather, 0.003), 0, -0.088, 0.012, 0, -0.35); wallet.add(flap);
+    wallet.add(at(box(0.104, 0.05, 0.003, new THREE.MeshStandardMaterial({ color: 0x2c1f17, roughness: 0.6 })), 0, -0.022, 0.006));
+    this.walletBills = new THREE.Group(); wallet.add(this.walletBills);
+    wallet.visible = false; this.held.add(wallet);
+    const coinL = new THREE.PointLight(0xffb070, 0.08, 0.8, 2); coinL.position.set(0, 0.05, -0.2); this.held.add(coinL);
 
     // ---------- weather ----------
     this.rain = new Rain({ count: 9000, size: [18, 10, 18], speed: 9, opacity: 0.5, wind: [0.3, 0.6] }).exclude([-2.45, -1, -3], [2.45, 2.75, 1.36]);
@@ -327,20 +360,70 @@ export default {
   },
 
   /* ================= the chapter ================= */
+  /** what's in your wallet right now, as real notes and coins */
+  fillWallet(amount) {
+    const g = this.walletBills; g.clear();
+    const notes = amount >= 160 ? [100, 50] : amount >= 150 ? [100, 50] : amount >= 100 ? [100] : amount >= 50 ? [50] : [];
+    notes.forEach((v, i) => { const b = billMesh(v, 0.1); b.position.set((i - 0.5) * 0.008, 0.012 + i * 0.006, 0.004 + i * 0.002); b.rotation.z = (i - 0.5) * 0.06; g.add(b); });
+    let rest = amount - notes.reduce((a, b) => a + b, 0), i = 0;
+    for (const v of [20, 10, 5, 1]) while (rest >= v && i < 5) { const c = pesoCoin(v); c.rotation.x = PI / 2; c.position.set(-0.035 + i * 0.022, -0.03, 0.009); g.add(c); rest -= v; i++; }
+  },
+  /** your hand comes up into view holding the open wallet (camera space: x right, y up, -z ahead) */
+  async showWallet(on) {
+    const w = this.wallet, arm = this.arm, el = new THREE.Vector3(0.22, -0.46, -0.12);
+    const place = k => { const y = -0.42 + 0.3 * k; w.position.set(0.035, y, -0.4); w.rotation.set(-0.55, 0.12, 0.06); arm.reach(new THREE.Vector3(0.07, y - 0.075, -0.37), el.clone().setY(el.y - (1 - k) * 0.2), 0.4); };
+    w.visible = arm.visible = true;
+    await animate(k => place(on ? k : 1 - k), on ? 0.9 : 0.7, 'inOut');
+    if (!on) w.visible = arm.visible = false;
+  },
+  /** your hand reaches out and puts coins down on the ledge next to hers, one by one */
+  async putCoins(coins) {
+    const arm = this.arm, held = this.held, wr = new THREE.Vector3(), el = new THREE.Vector3(0.22, -0.46, -0.12), inv = new THREE.Matrix4();
+    arm.visible = true;
+    for (const c of coins) {
+      held.updateMatrixWorld(true); inv.copy(held.matrixWorld).invert();
+      const spot = c.userData.home.clone().add(new THREE.Vector3(0.025, 0.06, 0.05)).applyMatrix4(inv), start = new THREE.Vector3(0.08, -0.3, -0.34);
+      c.visible = true;
+      await animate(k => { wr.lerpVectors(start, spot, k); arm.reach(wr, el, 0.5); const p = wr.clone().add(new THREE.Vector3(-0.02, -0.04, -0.06)).applyMatrix4(held.matrixWorld); c.position.copy(p).lerp(c.userData.home, k * k); }, 0.75, 'inOut');
+      c.position.copy(c.userData.home); audio.coin();
+      await animate(k => { wr.lerpVectors(spot, start, k); arm.reach(wr, el, 0.5); }, 0.5, 'inOut');
+    }
+    arm.visible = false;
+  },
+  /** the tindera sweeps the coins off the ledge into her hand and drops them in her tin */
+  async takeCoins(coins) {
+    const tin = this.tindera, hand = new THREE.Vector3();
+    tin.set({ spine: [18, 0, 0] });
+    for (const c of coins) {
+      tin.reach('R', hand.copy(c.position).add(new THREE.Vector3(0, 0.06, -0.06)), { rate: 10 });
+      await new Promise(r => setTimeout(r, 0));
+      await this.wait(0.32);
+      const p0 = c.position.clone(); audio.tone(4800 + Math.random() * 600, 0.08, { vol: 0.02 });
+      await animate(k => { c.position.lerpVectors(p0, hand, k); }, 0.18, 'in');
+      tin.arm.R.wr.attach(c);
+    }
+    tin.reach('R', this.lata.position.clone().add(new THREE.Vector3(0, 0.2, 0)), { rate: 7 });
+    await this.wait(0.55);
+    const drop = this.lata.position.clone().add(new THREE.Vector3(0, 0.06, 0));
+    for (const c of coins) { this.scene.attach(c); const p0 = c.position.clone(); await animate(k => c.position.lerpVectors(p0, drop, k), 0.12, 'in'); c.visible = false; c.position.copy(c.userData.home); c.rotation.set(0, 0, 0); }
+    audio.coin();
+    tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
+  },
+  wait(s) { return new Promise(r => { let t = 0; const stop = this.engine.onUpdate((dt, _, raw) => { t += raw; if (t >= s) { stop(); r(); } }); }); },
+
   async play(D, S, beat) {
     if (beat === 'montage') return this.montage(D, S);
     const rig = this.engine.rig, E = this.engine, lola = this.lola, tin = this.tindera;
     const cam = (pos, look, dur = 2.5, fov, e) => rig.move({ pos, look, dur, fov, e });
     if (S.wallet == null) S.wallet = 160;
     const C = cast(D); C.people({ 'Lola Ising': lola, Tindera: tin });
+    lola.reach('L', this.purseL, { rate: 30 }); lola.reach('R', this.purseR, { rate: 30 });
 
     cam([0.36, 1.58, 1.78], [0.0, 1.22, 0.0], 7, 42, 'out');
     await D.black(false, 1.6);
     await D.wait(1.6);
-    lola.set({ shR: [-38, 0, -10], elR: [-60, 0, 0] });
     C.intro('Lola Ising', 'Kapitbahay ninyo. Tatlong apo ang pinapakain niya.');
     await D.say('Lola Ising', "Isang kilo nga, 'neng.");
-    lola.set({ shR: [-8, 0, -6], elR: [-30, 0, 0] });
 
     // tindera, through the grille; then the price board
     E.dof({ target: tin.head, aperture: 0.005 });
@@ -351,36 +434,47 @@ export default {
     await cam([0.42, 1.58, 1.62], [1.42, 1.55, 0.0], 1.6, 30);
     await D.wait(1.2);
 
-    // Lola counts out her coins on the ledge
+    // Lola takes her coins out of the purse and puts them down on the ledge, one at a time
     E.dof({ focus: 1.15, aperture: 0.006 });
-    lola.pose('counting'); lola.set({ neck: [32, 0, 0], spine: [14, 0, 0] });
+    lola.set({ neck: [32, 0, 0], spine: [14, 0, 0] });
     cam([0.58, 1.46, 1.38], [-0.02, LEDGE, 0.2], 2.0, 28);
     await D.wait(1.0);
-    for (const c of this.ledgeCoins) { c.visible = true; audio.tone(5200 + Math.random() * 800, 0.18, { vol: 0.035 }); audio.tone(3600, 0.12, { vol: 0.02 }); await D.wait(0.42); }
+    { const hand = new THREE.Vector3(), pf = new THREE.Vector3();
+      for (const c of this.ledgeCoins) {
+        lola.reach('R', this.purseR, { rate: 12 });
+        await this.wait(0.3);
+        this.purse.getWorldPosition(pf); c.visible = true;
+        lola.reach('R', hand.copy(c.userData.home).add(new THREE.Vector3(-0.01, 0.07, 0.07)), { rate: 9 });
+        await animate(k => { c.position.lerpVectors(pf, c.userData.home, k); c.position.y += Math.sin(k * PI) * 0.03; }, 0.42, 'inOut');
+        c.position.copy(c.userData.home);
+        audio.tone(5200 + Math.random() * 800, 0.18, { vol: 0.035 }); audio.tone(3600, 0.12, { vol: 0.02 });
+      }
+      lola.reach('R', this.purseR, { rate: 8 }); }
     await D.say('', 'Binilang ni Lola ang barya niya. ₱40 lang. Kulang ng ₱18.');
     lola.expression({ sad: 0.6 }); lola.set({ neck: [40, 0, 0] });
     await D.say('Lola Ising', 'Kalahati na lang pala.');
 
-    // the lista
+    // the lista: she puts her hand flat on it
     E.dof({ target: tin.head, aperture: 0.005 });
-    this.lista.visible = true; tin.set({ shR: [-40, 0, -8], elR: [-70, 0, 0] });
+    tin.reach('R', this.lista.position.clone().add(new THREE.Vector3(0, 0.05, 0.02)), { rate: 6 }); tin.set({ spine: [10, 0, 0] });
     cam([0.36, 1.6, 1.6], [0.1, 1.38, -0.55], 1.8, 36);
     await D.say('Tindera', "Pasensya na po, 'La. Puno na po 'yung lista n'yo.");
-    tin.set({ shR: [-6, 0, -6], elR: [-12, 0, 0] }); setTimeout(() => (this.lista.visible = false), 600);
+    tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
 
     // Lola, half-turned, in silhouette against the bulb
-    lola.pose('stoop'); lola.set({ neck: [22, 35, 0], shR: [-20, 0, -6], elR: [-70, 0, 0] });
+    lola.set({ neck: [22, 35, 0], spine: [14, 0, 0] });
     E.dof({ target: lola.head, aperture: 0.005 });
     cam([0.62, 1.52, 1.58], [-0.05, 1.28, 0.6], 2.2, 38);
     await D.say('Lola Ising', 'May tatlo kasi akong apo sa bahay…');
     audio.drone(0.55, [43.65, 65.41, 98.0, 130.81]);
 
-    // your wallet
-    this.wallet.visible = true;
-    E.dof({ focus: 0.38, aperture: 0.007 });
-    await cam([0.36, 1.58, 1.78], [0.3, 1.25, 1.1], 1.4, 40);
+    // your wallet, in your own hand
+    this.fillWallet(S.wallet);
+    E.dof({ focus: 0.42, aperture: 0.006 });
+    cam([0.36, 1.58, 1.78], [0.34, 1.32, 1.2], 1.2, 40);
+    await this.showWallet(true);
     await D.say('', `₱${S.wallet} na lang ang pera mo. Tatlong araw pa bago sumahod.`);
-    this.wallet.visible = false;
+    await this.showWallet(false);
     E.dof({ target: lola.head, aperture: 0.004 });
     lola.set({ neck: [26, 0, 0] });
     cam([0.36, 1.58, 1.78], [0.0, 1.15, 0.2], 1.8, 40);
@@ -390,69 +484,90 @@ export default {
     if (devPick != null) setTimeout(() => document.querySelectorAll('#choice .opt')[+devPick]?.click(), 1800);
     const p = await D.choose(['Dagdagan|Ikaw na ang magbayad ng kulang', "Itabi|Pangkain mo pa 'yan bukas"], { timer: 12, id: 'bigas', def: 1 });
     S.bigas = p === 0;
+    const fetchBag = async (bag, half) => {
+      // she scoops it out of the sack below the counter and sets it down in the opening
+      tin.look(null); tin.set({ spine: [34, 0, 0] }); tin.reach('R', new THREE.Vector3(0.15, 0.62, -0.35), { rate: 5 });
+      await D.wait(1.0);
+      bag.visible = true; tin.arm.R.wr.add(bag); bag.position.set(0, -0.2, 0.03); bag.rotation.set(0, 0, 0);
+      tin.set({ spine: [10, 0, 0] }); tin.reach('R', new THREE.Vector3(-0.02, LEDGE + 0.26, -0.02), { rate: 4 });
+      await D.wait(1.0);
+      this.scene.attach(bag); audio.paper();
+      await animate(k => { bag.position.y += (LEDGE + 0.002 - bag.position.y) * k; bag.rotation.set(0, 0.3 * k, 0); }, 0.3, 'out');
+      bag.position.set(-0.02, LEDGE + 0.002, 0.06);
+      tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
+    };
+    // Lola takes the bag in both hands and holds it against her
+    const takeBag = async bag => {
+      lola.set({ spine: [20, 0, 0] });
+      lola.reach('L', bag.position.clone().add(new THREE.Vector3(0.06, 0.08, 0.04)), { rate: 7 }); lola.reach('R', bag.position.clone().add(new THREE.Vector3(-0.06, 0.08, 0.04)), { rate: 7 });
+      await D.wait(0.7);
+      lola.spine.attach(bag); audio.paper();
+      const p0 = bag.position.clone(), q0 = bag.quaternion.clone(), p1 = new THREE.Vector3(0, -0.05, 0.2), q1 = new THREE.Quaternion();
+      this.purse.visible = false;   // it went into her pocket while her hands were on the bag
+      const hl = new THREE.Object3D(), hr = new THREE.Object3D(); hl.position.set(0.07, 0.07, 0.03); hr.position.set(-0.07, 0.04, 0.05); bag.add(hl, hr);
+      lola.reach('L', hl, { rate: 6 }); lola.reach('R', hr, { rate: 6 });
+      lola.set({ spine: [8, 0, 0] });
+      await animate(k => { bag.position.lerpVectors(p0, p1, k); bag.quaternion.slerpQuaternions(q0, q1, k); }, 0.8, 'inOut');
+      this.lolaBags.push(bag); return { hl, hr };
+    };
     if (S.bigas) {
       S.wallet -= 20;
       // your ₱20 goes onto the ledge next to her coins
-      this.heldCoin.visible = true; E.dof({ focus: 0.5, aperture: 0.005 });
-      cam([0.32, 1.54, 1.5], [0.08, LEDGE, 0.2], 1.4, 36);
-      await animate(k => { this.heldCoin.position.set(0.04, -0.09 - k * 0.05, -0.3 - k * 0.14); }, 1.0);
-      this.heldCoin.visible = false; this.myCoin.visible = true; audio.coin();
+      E.dof({ focus: 0.55, aperture: 0.005 });
+      cam([0.32, 1.54, 1.5], [0.08, LEDGE, 0.2], 1.0, 36);
+      await D.wait(0.6);
+      await this.putCoins([this.myCoins[0]]);
       E.dof({ focus: 1.1, aperture: 0.006 });
       await D.say('', 'Inabot mo ang bente.');
-      // tindera fills a whole kilo
-      tin.look(null); tin.set({ spine: [30, 0, 0], shR: [-60, 0, -10], elR: [-30, 0, 0] });
-      await D.wait(1.0);
-      tin.set({ spine: [6, 0, 0], shR: [-70, 0, -4], elR: [-20, 0, 0] });
-      this.bagFull.position.set(0.0, LEDGE + 0.1, 0.06); this.bagFull.visible = true; audio.paper();
-      for (const c of [...this.ledgeCoins, this.myCoin]) c.visible = false;
-      await D.wait(0.6); tin.pose('standRelaxed');
-      // Lola turns to you and holds your wrist with both hands
-      lola.root.rotation.y = PI; lola.pose('stoop');
+      // the tindera takes it all, and fills a whole kilo
+      await this.takeCoins([...this.ledgeCoins, this.myCoins[0]]);
+      await fetchBag(this.bagFull);
+      const { hl } = await takeBag(this.bagFull);
+      // Lola turns to you and takes your hand
       await animate(k => { lola.root.rotation.y = PI - k * (PI - 0.3); lola.root.position.x = 0.02 + k * 0.1; lola.root.position.z = 0.74 + k * 0.2; }, 1.2);
-      lola.set({ shL: [-64, 0, 4], shR: [-64, 0, -4], elL: [-26, 0, -24], elR: [-26, 0, 24], spine: [10, 0, 0], neck: [16, 0, 0] });
-      lola.expression({ smile: 0.6, sad: 0 });
-      E.dof({ target: lola.arm.L.hand, aperture: 0.006 });
-      await cam([0.46, 1.56, 1.92], [0.16, 1.06, 0.98], 1.6, 38);
+      lola.expression({ smile: 0.6, sad: 0 }); lola.set({ spine: [10, 0, 0], neck: [16, 0, 0] });
+      E.dof({ target: lola.head, aperture: 0.004 });
+      await cam([0.46, 1.56, 1.92], [0.16, 1.2, 1.0], 1.4, 38);
+      lola.look(E.camera, 1);
       rig.move({ pos: [0.45, 1.55, 1.9], dur: 0.3 });
       audio.chord([196, 246.94, 293.66], 0.12, 0.08);
       await D.say('Lola Ising', 'Pagpalain ka ng Diyos, iho.');
       D.patak('Lola Ising', 'isang kilo ang naiuwi');
-      // she takes the full kilo and walks off under the street lamp
-      this.bagFull.visible = false;
-      const bag = riceBag(1); bag.position.set(0, -0.12, 0.03); lola.arm.R.wr.add(bag); this.lolaBags.push(bag);
-      lola.pose('stoop'); lola.expression({});
+      lola.look(null);
+      // she walks off under the street lamp with it
+      lola.expression({});
       E.dof({ target: lola.head, aperture: 0.003 });
       cam([0.4, 1.6, 1.9], [3.5, 1.1, 2.2], 4.5, 44);
       walkPath(lola, [[0.9, 0, 1.75], [3.2, 0, 2.3], [6.0, 0, 2.55], [11, 0, 2.8]], 0.6);
       await D.wait(3.5);
-      this.canton.visible = true;
     } else {
-      // you pay for your own dinner through the little opening
-      this.heldCoin.visible = true; E.dof({ focus: 0.5, aperture: 0.005 });
-      cam([0.32, 1.56, 1.55], [0.1, LEDGE + 0.05, -0.05], 1.4, 38);
-      await animate(k => { this.heldCoin.position.set(0.04 + k * 0.02, -0.09 - k * 0.03, -0.3 - k * 0.16); }, 1.0);
-      this.heldCoin.visible = false; audio.coin();
-      tin.set({ shR: [-64, 0, -4], elR: [-22, 0, 0] });
-      await D.wait(0.5); this.canton.visible = true; audio.paper(); tin.pose('standRelaxed');
+      // you pay for your own dinner, coins on the ledge beside hers
+      E.dof({ focus: 0.55, aperture: 0.005 });
+      cam([0.32, 1.56, 1.55], [0.1, LEDGE + 0.05, 0.1], 1.0, 38);
+      await D.wait(0.5);
+      await this.putCoins(this.myCoins);
+      await this.takeCoins(this.myCoins);
+      // your canton comes out the same way
+      tin.set({ spine: [30, 0, 0] }); tin.reach('R', new THREE.Vector3(0.3, 0.7, -0.4), { rate: 5 });
+      await D.wait(0.8);
+      this.canton.visible = true; tin.arm.R.wr.add(this.canton); this.canton.position.set(0, -0.08, 0.03);
+      tin.set({ spine: [8, 0, 0] }); tin.reach('R', new THREE.Vector3(0.12, LEDGE + 0.15, 0.1), { rate: 4 });
+      await D.wait(0.9);
+      this.scene.attach(this.canton); this.canton.position.set(0.12, LEDGE, 0.14); this.canton.rotation.set(0, 0.3, 0); audio.paper();
+      tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
       E.dof({ focus: 1.2, aperture: 0.005 });
       await D.say('', 'Binayaran mo ang pancit canton mo.');
-      // half a kilo for Lola, tucked under her shawl
-      tin.set({ spine: [24, 0, 0], shR: [-56, 0, -10], elR: [-30, 0, 0] }); await D.wait(0.8);
-      tin.set({ spine: [4, 0, 0], shR: [-70, 0, -4], elR: [-20, 0, 0] });
-      this.bagHalf.position.set(-0.04, LEDGE + 0.075, 0.08); this.bagHalf.visible = true; audio.paper();
-      for (const c of this.ledgeCoins) c.visible = false;
-      await D.wait(0.5); tin.pose('standRelaxed');
-      this.bagHalf.visible = false;
-      const half = riceBag(0.72); half.position.set(0, -0.1, 0.03); lola.arm.R.wr.add(half); this.lolaBags.push(half);
-      lola.set({ shR: [-30, 0, 18], elR: [-118, -30, 0], shL: [-22, 0, -14], elL: [-100, 20, 0], neck: [34, 0, 0], spine: [18, 0, 0] });
-      lola.expression({ sad: 0.8 });
+      // half a kilo for Lola
+      await this.takeCoins(this.ledgeCoins);
+      await fetchBag(this.bagHalf, true);
+      await takeBag(this.bagHalf);
+      lola.expression({ sad: 0.8 }); lola.set({ neck: [34, 0, 0], spine: [18, 0, 0] });
       E.dof({ target: lola.head, aperture: 0.004 });
       cam([0.5, 1.55, 1.7], [0.0, 1.05, 0.7], 1.6, 40);
       await D.wait(1.2);
-      half.visible = false; // under the shawl now
       cam([0.4, 1.6, 1.9], [-4.0, 1.0, 2.4], 5, 44);
       walkPath(lola, [[-0.95, 0, 1.1], [-2.4, 0, 1.9], [-5.5, 0, 2.5], [-12, 0, 2.9]], 0.45);
-      await D.say('', 'Kalahating kilo ang kinuha ni Lola. Isiniksik niya sa ilalim ng balabal, tapos naglakad sa dilim.');
+      await D.say('', 'Kalahating kilo ang kinuha ni Lola. Yakap-yakap niya ito habang naglalakad sa dilim.');
       D.patak('Lola Ising', 'kalahating kilo lang');
     }
     S.wallet -= 30;
@@ -466,8 +581,9 @@ export default {
     this.boardM.map = this.boardTex[1]; this.boardM.needsUpdate = true;
     lola.root.position.set(0.02, 0, 0.74); lola.root.rotation.y = PI; lola.walk = 0;
     lola.pose('stoop', true); lola.set({ shR: [-34, 0, -10], elR: [-70, 0, 0] }, true); lola.expression({});
-    for (const b of this.lolaBags) b.removeFromParent(); this.lolaBags = [];
-    for (const c of [...this.ledgeCoins, this.myCoin]) c.visible = false;
+    for (const b of this.lolaBags) { b.removeFromParent(); b.visible = false; } this.lolaBags = []; this.purse.visible = true;
+    lola.reach('L', this.purseL, { rate: 30 }); lola.reach('R', this.purseR, { rate: 30 });
+    for (const c of [...this.ledgeCoins, ...this.myCoins]) c.visible = false;
     this.bagFull.visible = this.bagHalf.visible = this.canton.visible = false;
     E.dof({ target: this.board, aperture: 0.005 });
     rig.set({ pos: [0.95, 1.58, 1.1], look: [1.42, 1.55, 0.0], fov: 30 });

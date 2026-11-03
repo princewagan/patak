@@ -39,10 +39,17 @@ function poloTex() {
   });
 }
 
+/* The sheet's top face maps 0..1 onto a 1.0 × 1.95 m mattress, so the print is tiled to match the mattress
+   (one tile ≈ 0.8 m square, a flower every 10 cm) instead of stretching one square tile down its length. */
 function sheetTex() {
+  const t = sheetPrint();
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1.25, 2.44);
+  return t;
+}
+function sheetPrint() {
   return canvasTex(512, 512, (c, w, h) => {
     c.fillStyle = '#4a5466'; c.fillRect(0, 0, w, h);
-    for (let y = 0; y < h; y += 64) for (let x = 0; x < w; x += 64) {
+    for (let y = 0; y < h; y += 64) for (let x = -64; x < w; x += 64) {   // from -64 so the flower cut at the right edge continues at the left: the print tiles
       const ox = (y / 64) % 2 ? 32 : 0;
       c.fillStyle = 'rgba(230,220,200,.35)'; c.beginPath(); c.arc(x + ox + 32, y + 32, 13, 0, 7); c.fill();
       c.fillStyle = 'rgba(160,70,80,.35)'; for (let k = 0; k < 5; k++) { c.beginPath(); c.ellipse(x + ox + 32 + Math.cos(k * 1.256) * 17, y + 32 + Math.sin(k * 1.256) * 17, 8, 5, k * 1.256, 0, 7); c.fill(); }
@@ -84,6 +91,7 @@ function glassMat() {
 }
 
 export default {
+  ao: true,   // contact shadows (see Engine)
   dof: { focus: 0.62, aperture: 0.006, maxblur: 0.009 },
   grade: { lift: [0.0, 0.006, 0.014], gain: [0.86, 0.95, 1.1], sat: 1.05, grain: 0.085, bloom: 0.38, bloomThreshold: 0.8, exposure: 0.66, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
 
@@ -134,8 +142,11 @@ export default {
     const sheet = new THREE.MeshStandardMaterial({ map: sheetTex(), roughness: 0.95, normalMap: pbr('denim_fabric', { repeat: [3, 3] }).normalMap });
     sheet.normalScale.set(0.5, 0.5);
     S.add(at(box(1.0, 0.11, 1.95, sheet, 0.04), -0.55, 0.055, 0.35));
-    S.add(at(box(0.48, 0.1, 0.3, std(0xd8d2c6, { rough: 0.95 }), 0.05), -0.55, 0.15, -0.42));
-    const blanket = box(0.9, 0.035, 0.7, std(0x5e3d3d, { rough: 1 }), 0.015); blanket.position.set(-0.62, 0.125, 1.42); blanket.rotation.y = 0.08; S.add(blanket);
+    const weave = pbr('denim_fabric', { repeat: [2, 2] }).normalMap;   // pillow and blanket get the same cloth weave as the sheet
+    const pillowM = new THREE.MeshStandardMaterial({ color: 0xd8d2c6, roughness: 0.95, normalMap: weave }); pillowM.normalScale.set(0.6, 0.6);
+    const blanketM = new THREE.MeshStandardMaterial({ color: 0x5e3d3d, roughness: 1, normalMap: weave }); blanketM.normalScale.set(0.9, 0.9);
+    S.add(at(box(0.48, 0.1, 0.3, pillowM, 0.05), -0.55, 0.15, -0.42));
+    const blanket = box(0.9, 0.035, 0.7, blanketM, 0.015); blanket.position.set(-0.62, 0.125, 1.42); blanket.rotation.y = 0.08; S.add(blanket);
     // stand fan (oscillating head, spinning blades)
     const fan = new THREE.Group(); fan.position.set(0.95, 0, 0.55); S.add(fan);
     const fanM = std(0xe6e3dc, { rough: 0.45 });

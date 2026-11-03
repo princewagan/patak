@@ -1,4 +1,6 @@
 import { audio } from './audio.js';
+import { IntroHud } from './introhud.js';
+import { voiceFor } from '../voice-lines.js';
 
 const $ = s => document.querySelector(s);
 
@@ -10,6 +12,15 @@ class Clock {
   cancel(j) { if (j) this.jobs.delete(j); }
   tick(dt) { this.now += dt; for (const j of [...this.jobs]) if (j.at <= this.now) { this.jobs.delete(j); j.fn(); } }
 }
+
+/* What helping costs him, shown under the helping option (index 0) while the clock runs.
+   Only the everyday choices; Part Three is what really happened, so it gets none. A scene can also pass 'Label|line|cost'. */
+const COST = {
+  sobre: S => `−₱20 · ₱${S.wallet - 20} na lang hanggang Biyernes`,
+  kaha: () => 'Baka hindi ka na ma-renew',
+  bigas: S => `−₱20 · ₱${S.wallet - 20} na lang, tatlong araw pa`,
+  ulit: () => '−₱20 · Wala ka nang matitira',
+};
 
 /** Story-facing helpers. Every helper returns a promise the script awaits. */
 export class Director {
@@ -70,16 +81,22 @@ export class Director {
   bars(on) { document.body.classList.toggle('nobars', !on); }
 
   // ---------- subtitles ----------
-  /** say('Ale', "line") — speaker line. say('', "...") — narration */
+  /** say('Ale', "line") — speaker line. say('', "...") — narration. A line in voice-lines.js plays its recording with the subtitle. */
   async say(who, text, { hold, wait = true } = {}) {
+    // the recording starts with its subtitle, and the subtitle stays up until it ends (no voices in &fast)
+    const url = this.fast ? null : voiceFor(who, text);
+    audio.stopVoice();
+    const v = url ? await audio.voice(url) : null;
     const sub = $('#sub');
     sub.querySelector('.who').textContent = who || '';
     sub.querySelector('.line').innerHTML = text;
     sub.classList.toggle('narr', !who);
     sub.classList.add('on');
     if (!wait) return;
-    const t = hold ?? this.readTime(text.replace(/<[^>]+>/g, ''));
+    let t = hold ?? this.readTime(text.replace(/<[^>]+>/g, ''));
+    if (v) t = Math.max(t, v.duration + 0.35);
     await this.holdOrSkip(t);
+    v?.stop(0.08); // skipped: cut the voice with a short fade; if it already ended this does nothing
     sub.classList.remove('on');
     await this.wait(0.25);
   }
@@ -131,9 +148,16 @@ export class Director {
   choose(opts, { timer = 10, slowmo = true, def = 1, id, defLabel = 'Walang gagawin' } = {}) {
     return new Promise(res => {
       const el = $('#choice'), [l, r] = el.querySelectorAll('.opt'), ring = el.querySelector('.ring'), needle = el.querySelector('.needle');
-      const parse = o => { const [a, b] = String(o).split('|'); return b != null ? [a, b] : ['', a]; };
+      const parse = o => { const [a, b, c] = String(o).split('|'); return b != null ? [a, b, c] : ['', a]; };
       const single = opts.length === 1;
-      [[l, opts[0]], [r, opts[1] ?? '']].forEach(([b, o]) => { const [lab, ln] = parse(o); b.querySelector('.lab').textContent = lab; b.querySelector('.ln').textContent = ln; });
+      [[l, opts[0]], [r, opts[1] ?? '']].forEach(([b, o], k) => {
+        const [lab, ln, cost0] = parse(o);
+        const cost = cost0 ?? (k === 0 && !single && timer ? COST[id]?.(this.state) : null);
+        b.querySelector('.lab').textContent = lab; b.querySelector('.ln').textContent = ln;
+        let c = b.querySelector('.cost');
+        if (!c) { c = document.createElement('span'); c.className = 'cost'; b.querySelector('.txt').appendChild(c); }
+        c.innerHTML = cost ? `<b>Kapalit</b>${cost}` : ''; c.hidden = !cost;
+      });
       el.querySelector('.def span').textContent = defLabel;
       el.classList.toggle('single', single);
       el.classList.remove('urgent', 'out');
@@ -148,10 +172,14 @@ export class Director {
       const prevScale = this.engine.timeScale;
       if (timer && slowmo) this.engine.timeScale = 0.35;
       audio.choiceIn();
+      // the pressure: the world goes quiet and the edges of the screen close in, pulsing with the heart
+      const vig = this.vignette();
+      if (timer) { document.body.classList.add('pressing'); audio.pressure(true); }
       let hb, stopTimer, done = false;
       const finish = (i, timedOut = false) => {
         if (done) return; done = true;
         this.clock.cancel(hb); stopTimer?.(); this.choiceKeys = null;
+        document.body.classList.remove('pressing', 'pressing-hard'); audio.pressure(false);
         l.onclick = r.onclick = l.onmouseenter = r.onmouseenter = l.onmouseleave = r.onmouseleave = null;
         this.engine.timeScale = prevScale;
         el.classList.remove('urgent');
@@ -159,6 +187,7 @@ export class Director {
         if (!timedOut) { aim(i); picked.classList.add('picked'); other.classList.add('dim'); audio.uiSelect(); }
         else { aim(-1); el.classList.add('out'); l.classList.add('dim'); r.classList.add('dim'); audio.tone(110, .5, { vol: .1 }); }
         this.lastTimedOut = timedOut;
+        this.lastHelped = !timedOut && i === 0 && id !== 'baba';
         if (id) this.state.choices[id] = timedOut ? 'timeout' : i;
         this.clock.after(timedOut ? 1.0 : 0.7, () => el.classList.remove('on'));
         this.clock.after(timedOut ? 1.25 : 1.05, () => res(i));
@@ -169,11 +198,15 @@ export class Director {
         stopTimer = this.engine.onUpdate((dt, t, raw) => {
           left = Math.max(0, left - raw);
           ring.style.strokeDashoffset = String(326.7 * (1 - left / timer));
-          if (left < 3) el.classList.add('urgent');
+          if (left < 3) { el.classList.add('urgent'); document.body.classList.add('pressing-hard'); }
           if (left <= 0) finish(def, true);
         });
-        let beat = 0.95;
-        const pulse = () => { audio.heartbeat(); beat = Math.max(0.42, beat - 0.05); hb = this.clock.after(beat, pulse); };
+        let beat = 0.9;
+        const pulse = () => {
+          audio.heartbeat(1 + (1 - left / timer) * 0.7);
+          vig.classList.remove('beat'); void vig.offsetWidth; vig.classList.add('beat');
+          beat = Math.max(0.4, beat - 0.055); hb = this.clock.after(beat, pulse);
+        };
         pulse();
       }
       l.onclick = () => finish(0); r.onclick = () => finish(1);
@@ -209,6 +242,37 @@ export class Director {
       await this.wait(0.4);
       await onAsk(i);
     }
+  }
+
+  /** the edge-of-screen darkness used while a choice is on the clock */
+  vignette() {
+    if (!this._vig) { this._vig = document.createElement('div'); this._vig.id = 'press'; $('#ui').insertBefore(this._vig, $('#choice')); }
+    return this._vig;
+  }
+
+  // ---------- a new day ----------
+  /**
+   * A day that nobody can miss: a big slanted plate over the scene as it fades in (doesn't block the script).
+   * day('Kinabukasan', 'Miyerkules · 6:41 AM') · day('Huwebes', '6:40 AM', { cash: 20, week: [...], note: '...' })
+   */
+  day(big, sub, { cash, week, note, delay = 1.2, hold = 4.2 } = {}) {
+    const run = async () => {
+      await this.wait(delay);
+      const H = new IntroHud(); H.el.classList.add('dayhud');
+      H.name(big, sub); audio.slam();
+      if (cash != null) { await this.wait(0.8); H.cash(cash); audio.countUp(); }
+      if (week) {
+        await this.wait(0.5);
+        H.week(week, note || '');
+        for (let i = 0; i < week.length; i++) { H.day(i); audio.dayTick(); await this.wait(0.22); }
+        if (note) H.note();
+      }
+      await this.wait(hold);
+      H.nameOff(); H.out();
+      await this.wait(1);
+      H.remove();
+    };
+    run();
   }
 
   // ---------- time / place stamp ----------
@@ -269,14 +333,25 @@ export class Director {
     el.innerHTML = '';
   }
 
-  // ---------- patak marker ----------
-  async patak(who, state) {
-    const p = $('#patak');
-    p.classList.remove('on'); void p.offsetWidth;
-    p.querySelector('.who').textContent = who;
-    p.querySelector('.state').textContent = state;
-    p.classList.add('on');
-    this.clock.after(0.56, () => audio.drop());
-    this.clock.after(5.2, () => p.classList.remove('on'));
+  // ---------- patak marker: what his choice did to someone ----------
+  /** patak('Totoy', 'napangiti'). Whether he helped comes from the choice just made, or pass it as the third argument. */
+  async patak(who, state, helped = this.lastHelped) {
+    let t = $('#toast');
+    if (!t) {
+      t = document.createElement('div'); t.id = 'toast';
+      t.innerHTML = `<div class="icon"><i class="ring"></i><i class="ring"></i><svg viewBox="0 0 40 60"><path d="M20 4C20 4 8 22 8 32a12 12 0 0 0 24 0C32 22 20 4 20 4z"/></svg></div>
+        <div class="body"><div class="kick"></div><div class="who"></div><div class="state"></div></div><i class="shine"></i>`;
+      $('#ui').appendChild(t);
+    }
+    this.clock.cancel(this._toastOff); this.clock.cancel(this._toastGone);
+    t.classList.remove('on', 'off', 'yes', 'no'); void t.offsetWidth;
+    t.classList.add(helped ? 'yes' : 'no');
+    t.querySelector('.kick').textContent = helped ? 'Tinulungan mo' : 'Hindi mo tinulungan';
+    t.querySelector('.who').textContent = who;
+    t.querySelector('.state').textContent = state;
+    t.classList.add('on');
+    this.clock.after(0.18, () => (helped ? audio.helped() : audio.unhelped()));
+    this._toastOff = this.clock.after(5.4, () => t.classList.add('off'));
+    this._toastGone = this.clock.after(6, () => t.classList.remove('on', 'off'));
   }
 }
