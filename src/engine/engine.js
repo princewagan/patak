@@ -70,6 +70,7 @@ export class Engine {
     this.scene = new THREE.Scene();
     this.current = null; // current scene module
     this.timeScale = 1;
+    this.paused = false;
     this.time = 0;
     this.clock = new THREE.Clock();
     this.updaters = new Set();
@@ -158,6 +159,8 @@ export class Engine {
 
   frame() {
     const rawFull = this.clock.getDelta();
+    // paused: the picture holds and nothing in the story advances (see Director.pause)
+    if (this.paused) { this.composer.render(); return; }
     this.adapt(Math.min(rawFull, 0.25));
     const raw = Math.min(rawFull, 0.1);
     const dt = raw * this.timeScale;
@@ -182,9 +185,34 @@ const ease = {
   out: t => 1 - Math.pow(1 - t, 3),
   in: t => t * t * t,
   sine: t => -(Math.cos(Math.PI * t) - 1) / 2,
+  head: t => t * t * t * (t * (6 * t - 15) + 10), // minimum jerk: how people actually turn their heads
 };
 export { ease };
 
+/** damped spring toward a target; ζ < 1 overshoots a little. Substepped so it behaves the same at any frame rate. */
+function spring(x, v, target, w, z, dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.005)), h = dt / n;
+  for (let i = 0; i < n; i++) { v += (w * w * (target - x) - 2 * z * w * v) * h; x += v * h; }
+  return [x, v];
+}
+function spring3(x, v, target, w, z, dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.005)), h = dt / n;
+  for (let i = 0; i < n; i++) {
+    v.x += (w * w * (target.x - x.x) - 2 * z * w * v.x) * h; x.x += v.x * h;
+    v.y += (w * w * (target.y - x.y) - 2 * z * w * v.y) * h; x.y += v.y * h;
+    v.z += (w * w * (target.z - x.z) - 2 * z * w * v.z) * h; x.z += v.z * h;
+  }
+}
+const _d = new THREE.Vector3(), _h = new THREE.Vector3(), _e = new THREE.Vector3();
+
+/*
+  pos/look/fov/roll are where the shot wants to be; move() and set() drive them.
+  rig.pov = 0 is a film camera: it goes exactly there.
+  rig.pov = 1 is someone's head: what's shown follows the same targets through a spring, so turns start and stop softly
+  and flow into each other, and it breathes, leans into turns and pivots on a neck. Timing never changes: move() still
+  resolves at its duration, the head just finishes settling a moment later. rig.set is a cut and snaps straight there.
+  jolt drives road motion in any mode: a smooth surface plus the odd real bump that settles on the suspension.
+*/
 export class CameraRig {
   constructor(cam) {
     this.cam = cam;
@@ -194,28 +222,48 @@ export class CameraRig {
     this.roll = 0;
     this.shake = 0.5;       // handheld amount
     this.jolt = 0;          // vehicle bumps
+    this.pov = 0;           // 0 film camera .. 1 somebody's head
+    this.road = 0;          // current suspension travel (m), for things carried along with the head
     this.moves = [];
     this.t = 0;
     this.offset = new THREE.Vector3();
     this._lookOff = new THREE.Vector3();
+    // what the head is actually doing
+    this.snap = true;
+    this.fPos = new THREE.Vector3(); this.vPos = new THREE.Vector3();
+    this.fDir = new THREE.Vector3(0, 0, -1); this.vDir = new THREE.Vector3();
+    this.fFov = 42; this.vFov = 0;
+    this.lean = 0; this.ref = new THREE.Vector3(0, 0, -1);
+    // suspension
+    this.susY = 0; this.susV = 0; this.susR = 0; this.susRV = 0; this.bumpIn = 1.5; this._jPrev = 0;
   }
-  reset() { this.moves.length = 0; }
+  reset() { this.moves.length = 0; this.pov = 0; this.snap = true; }
   set({ pos, look, fov, roll }) {
     if (pos) this.pos.copy(v3(pos));
     if (look) this.look.copy(v3(look));
     if (fov) this.fov = fov;
     if (roll != null) this.roll = roll;
+    this.snap = true;
   }
+  /** a sudden knock (door slam, pothole) */
+  kick(v = 0.2, r = 0) { this.susV -= v; this.susRV += r; }
   /** move to pos/look/fov over dur seconds; optional via points for curved path */
-  move({ pos, look, fov, roll, dur = 3, e = 'inOut', via }) {
+  move({ pos, look, fov, roll, dur = 3, e, via }) {
     return new Promise(res => {
+      const head = this.pov > 0 && (!e || e === 'inOut');
       const m = {
-        t: 0, dur, e: ease[e] || ease.inOut, res,
+        t: 0, dur, e: head ? ease.head : ease[e] || ease.inOut, res,
         p0: this.pos.clone(), p1: pos ? v3(pos) : this.pos.clone(),
         l0: this.look.clone(), l1: look ? v3(look) : this.look.clone(),
         f0: this.fov, f1: fov ?? this.fov, r0: this.roll, r1: roll ?? this.roll,
       };
       if (via) m.curve = new THREE.CatmullRomCurve3([m.p0, ...via.map(v3), m.p1]);
+      // a head turning on the spot sweeps through angles at an even pace, not along a straight line between two look points
+      if (this.pov > 0 && m.p0.distanceTo(m.p1) < 0.2) {
+        const a = m.l0.clone().sub(m.p0), b = m.l1.clone().sub(m.p1);
+        const la = a.length(), lb = b.length();
+        if (la > 1e-4 && lb > 1e-4) m.arc = { a: a.divideScalar(la), b: b.divideScalar(lb), la, lb };
+      }
       // a new move cancels moves that are still running
       for (const o of this.moves) o.res();
       this.moves = [m];
@@ -227,22 +275,81 @@ export class CameraRig {
       m.t += dt;
       const k = Math.min(1, m.t / m.dur), e = m.e(k);
       if (m.curve) this.pos.copy(m.curve.getPoint(e)); else this.pos.lerpVectors(m.p0, m.p1, e);
-      this.look.lerpVectors(m.l0, m.l1, e);
+      if (m.arc) {
+        const { a, b, la, lb } = m.arc, th = Math.acos(Math.min(1, Math.max(-1, a.dot(b))));
+        if (th < 1e-3) _d.lerpVectors(a, b, e);
+        else { const s = Math.sin(th); _d.copy(a).multiplyScalar(Math.sin((1 - e) * th) / s).addScaledVector(b, Math.sin(e * th) / s); }
+        this.look.copy(this.pos).addScaledVector(_d, la + (lb - la) * e);
+      } else this.look.lerpVectors(m.l0, m.l1, e);
       this.fov = m.f0 + (m.f1 - m.f0) * e;
       this.roll = m.r0 + (m.r1 - m.r0) * e;
       if (k >= 1) { m.done = true; m.res(); }
     }
     this.moves = this.moves.filter(m => !m.done);
-    const t = this.t, s = this.shake * 0.006;
+    const t = this.t, s = this.shake * 0.006, pv = this.pov;
+
+    // the road: a smooth surface, the odd real bump, and whatever knocked us
+    const j = this.jolt;
+    if (j - this._jPrev > 0.2) this.kick(0.1 + j * 0.16, (Math.sin(t * 37) > 0 ? 1 : -1) * 0.02);
+    this._jPrev = j;
+    if (j > 0.05) {
+      this.bumpIn -= raw;
+      if (this.bumpIn <= 0) { this.kick((0.07 + Math.random() * 0.15) * Math.min(1.2, j), (Math.random() - .5) * 0.05 * j); this.bumpIn = 0.8 + Math.random() * 2.8; }
+    }
+    [this.susY, this.susV] = spring(this.susY, this.susV, 0, 15, 0.32, raw);
+    [this.susR, this.susRV] = spring(this.susR, this.susRV, 0, 10, 0.38, raw);
+    const surface = (Math.sin(t * 8.3) + Math.sin(t * 13.1 + 1.1) * 0.6 + Math.sin(t * 19.7 + 2.3) * 0.3) * j * 0.0012;
+    this.road = this.susY + surface;
+
+    // the head follows the shot
+    _d.copy(this.look).sub(this.pos); if (_d.lengthSq() < 1e-8) _d.copy(this.fDir); _d.normalize();
+    if (this.snap || pv <= 0) {
+      this.fPos.copy(this.pos); this.fDir.copy(_d); this.fFov = this.fov;
+      this.vPos.set(0, 0, 0); this.vDir.set(0, 0, 0); this.vFov = 0; this.lean = 0;
+      this.ref.copy(_d); this.snap = false;
+    } else {
+      spring3(this.fPos, this.vPos, this.pos, 7.5, 1, raw);
+      spring3(this.fDir, this.vDir, _d, 8.5, 0.86, raw);
+      this.fDir.normalize();
+      [this.fFov, this.vFov] = spring(this.fFov, this.vFov, this.fov, 6, 1, raw);
+    }
+
     this.offset.set(
       (Math.sin(t * 0.71) + Math.sin(t * 1.33 + 1.7) * 0.5) * s,
-      (Math.sin(t * 0.93 + 0.4) + Math.sin(t * 1.71) * 0.4) * s + Math.sin(t * 13.0) * this.jolt * 0.004 + (Math.random() - .5) * this.jolt * 0.003,
+      (Math.sin(t * 0.93 + 0.4) + Math.sin(t * 1.71) * 0.4) * s + this.road,
       (Math.sin(t * 0.53 + 2.1)) * s);
     this._lookOff.set(Math.sin(t * 0.61 + 3) * s * 2.2, Math.sin(t * 0.83 + 1) * s * 1.6, 0);
-    this.cam.position.copy(this.pos).add(this.offset);
-    this.cam.lookAt(this.look.x + this._lookOff.x, this.look.y + this._lookOff.y, this.look.z);
-    this.cam.rotateZ(this.roll + Math.sin(t * 0.47) * s * 0.4);
-    if (Math.abs(this.cam.fov - this.fov) > 1e-3) { this.cam.fov = this.fov; this.cam.updateProjectionMatrix(); }
+    let roll = this.roll + Math.sin(t * 0.47) * s * 0.4 + this.susR;
+    let lookY = this._lookOff.y + this.susY * 0.3;
+
+    if (pv > 0) {
+      const zoom = this.fFov / 45; // a narrow lens magnifies everything; keep the head the same size on screen
+      // breathing, a slow rise and fall a little behind the chest
+      const b = t * 1.32;
+      this.offset.y += Math.sin(b) * 0.0032 * pv;
+      lookY += Math.sin(b - 0.7) * 0.0016 * 2.2 * pv * zoom;
+      // the eyes pivot on the neck: looking down brings them forward and down, turning swings them round a little
+      this.ref.lerp(this.fDir, 1 - Math.exp(-0.16 * raw)).normalize();
+      const pitch = Math.asin(Math.min(1, Math.max(-1, this.fDir.y)));
+      _h.set(this.fDir.x, 0, this.fDir.z).normalize();
+      _e.set(this.ref.x, 0, this.ref.z).normalize();
+      const fwd = 0.09 * Math.cos(pitch) + 0.1 * Math.sin(-pitch), up = 0.1 * (Math.cos(pitch) - 1) - 0.09 * Math.sin(-pitch);
+      this.offset.addScaledVector(_h, fwd * 0.45 * pv).addScaledVector(_e, -0.09 * 0.45 * pv);
+      this.offset.y += up * 0.45 * pv;
+      // lean a touch into a turn
+      const yawRate = this.fDir.z * this.vDir.x - this.fDir.x * this.vDir.z;
+      const leanT = Math.max(-0.03, Math.min(0.03, yawRate * 0.016));
+      this.lean += (leanT - this.lean) * (1 - Math.exp(-5 * raw));
+      roll += this.lean * pv;
+    }
+
+    // the eyes stay locked on what they're looking at while the head moves; anything close (a phone in the hand) rides the same road
+    const L = Math.max(0.05, this.look.distanceTo(this.pos)), near = 1 - Math.min(1, Math.max(0, (L - 0.6) / 0.9)), w = Math.min(1, L);
+    this.cam.position.copy(this.fPos).add(this.offset);
+    _d.copy(this.fPos).addScaledVector(this.fDir, L);
+    this.cam.lookAt(_d.x + this._lookOff.x * w, _d.y + lookY * w + this.road * near, _d.z);
+    this.cam.rotateZ(roll);
+    if (Math.abs(this.cam.fov - this.fFov) > 1e-3) { this.cam.fov = this.fFov; this.cam.updateProjectionMatrix(); }
   }
 }
 

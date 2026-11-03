@@ -15,7 +15,6 @@
     <div class="bar bottom"></div>
     <div id="fader"></div>
 
-    <div id="card"><div class="part"></div><h2 class="title"></h2><div class="meta"></div></div>
     <div id="charcard"><h2 class="name"></h2><div class="lines"></div></div>
     <div id="bigline"></div>
 
@@ -28,9 +27,9 @@
     <div id="sub"><div class="who"></div><div class="line"></div></div>
 
     <div id="choice">
-      <div class="def">Walang gagawin</div>
+      <div class="def chip"><span>Walang gagawin</span></div>
       <div class="dialrow">
-        <button class="opt l"><span class="lab"></span><span class="ln"></span></button>
+        <button class="opt l chip"><span class="key">←</span><span class="txt"><span class="lab"></span><span class="ln"></span></span></button>
         <div class="dial"><svg viewBox="0 0 120 120">
           <circle class="ring-bg" cx="60" cy="60" r="52"/>
           <circle class="ring" cx="60" cy="60" r="52"/>
@@ -39,23 +38,67 @@
           <path class="drop" d="M60 47c0 0-7 9-7 14a7 7 0 0 0 14 0c0-5-7-14-7-14z"/>
           <g class="needle"><line x1="60" y1="60" x2="60" y2="24"/><path d="M60 19l-4 8h8z"/></g>
         </svg></div>
-        <button class="opt r"><span class="lab"></span><span class="ln"></span></button>
+        <button class="opt r chip flip"><span class="txt"><span class="lab"></span><span class="ln"></span></span><span class="key">→</span></button>
       </div>
     </div>
 
     <div id="ask"></div>
+    <div id="stats"></div>
+    <div id="summary"></div>
     <div id="hint">▸</div>
     <div id="stamp"></div>
 
-    <div id="title">
-      <div class="drop-anim"><svg viewBox="0 0 40 60"><path d="M20 4C20 4 8 22 8 32a12 12 0 0 0 24 0C32 22 20 4 20 4z"/></svg></div>
-      <h1>PATAK</h1>
-      <p class="sub">isang interactive na kuwento</p>
-      <div class="load"><i></i></div>
-      <button id="start" disabled>Naglo-load…</button>
-      <p class="keys">Mas maganda kung naka-fullscreen at may tunog · F = fullscreen · M = mute</p>
+    <button id="pausebtn" class="chip" aria-label="Pause"><i></i><i></i></button>
+
+    <div id="menu">
+      <div class="col main">
+        <div class="head">Naka-pause</div>
+        <div id="menuItems"></div>
+      </div>
+      <div class="col list">
+        <div class="head">Mga Eksena</div>
+        <div id="sceneItems"></div>
+        <button id="menuBack" class="chip">Bumalik</button>
+      </div>
+      <div class="foot"><span><b>P</b> Pause</span><span><b>F</b> Fullscreen</span><span><b>M</b> Tunog</span><span><b>Space</b> Susunod</span></div>
+    </div>
+
+    <div id="title" class="boot">
+      <canvas id="titleRain"></canvas>
+      <div class="logo"><h1>PATAK</h1><div class="mirror" aria-hidden="true">PATAK</div></div>
+      <div class="boot"></div>
+      <p class="press">Pindutin ang kahit anong key</p>
+      <div class="actions">
+        <button id="start" disabled>Naglo-load…</button>
+        <button id="scenesBtn" disabled>Mga Eksena</button>
+        <button id="soundBtn">Tunog: Bukas</button>
+        <button id="fullBtn">Fullscreen</button>
+        <button id="creditsBtn">Mga Gumawa</button>
+      </div>
+      <p class="blurb"></p>
+      <div class="foot">
+        <div class="k"><span><b>↑↓</b> Pumili</span><span><b>Enter</b> Piliin</span><span><b>F</b> Fullscreen</span><span><b>M</b> Tunog</span><span><b>P</b> Pause</span></div>
+        <div>THEO 12 · Gacusan, Wagan</div>
+      </div>
+      <div id="credits">
+        <div class="box">
+          <h2>Mga Gumawa</h2>
+          <div class="names">Keira Gacusan · Prince Wagan · THEO 12</div>
+          <h3>Mga tunog</h3>
+          <div id="creditList"></div>
+          <button id="creditsBack" class="chip">Bumalik</button>
+        </div>
+      </div>
+      <div class="wipe"></div>
     </div>
   </div>
+
+  <svg width="0" height="0" style="position:absolute"><filter id="water" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.008 0.08" numOctaves="2" seed="4">
+      <animate attributeName="baseFrequency" dur="7s" values="0.008 0.08;0.011 0.11;0.008 0.08" repeatCount="indefinite"/>
+    </feTurbulence>
+    <feDisplacementMap in="SourceGraphic" scale="22" xChannelSelector="R" yChannelSelector="G"/>
+  </filter></svg>
 
   <script type="module" src="/src/main.js"></script>
 </body>

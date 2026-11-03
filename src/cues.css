@@ -1,0 +1,14 @@
+/* Who is speaking, and who this person is. Same sans as the HUD, tight spacing. */
+#speaker { position: absolute; left: 0; top: 0; z-index: 5; padding: calc(var(--u) * .18) calc(var(--u) * .7) calc(var(--u) * .14); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 1.7); line-height: 1.1; color: #05080b; background: #fff; white-space: nowrap; opacity: 0; transition: opacity .18s; pointer-events: none; will-change: transform; }
+#speaker::after { content: ''; position: absolute; left: 50%; bottom: calc(var(--u) * -.5); margin-left: calc(var(--u) * -.45); border-left: calc(var(--u) * .45) solid transparent; border-right: calc(var(--u) * .45) solid transparent; border-top: calc(var(--u) * .55) solid #fff; }
+#speaker.on { opacity: 1; }
+
+#who { position: absolute; left: calc(var(--u) * 4.2); top: calc(var(--bar) + var(--u) * 2.4); z-index: 7; max-width: calc(var(--u) * 34); padding-left: calc(var(--u) * 1.1); border-left: calc(var(--u) * .28) solid var(--hot); opacity: 0; transform: translateX(calc(var(--u) * -2)); transition: opacity .3s ease, transform .5s cubic-bezier(.16, .9, .24, 1); text-shadow: 0 0 calc(var(--u) * .7) #000, 0 calc(var(--u) * .1) calc(var(--u) * .3) #000; pointer-events: none; }
+#who.on { opacity: 1; transform: none; }
+#who b { display: block; font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 3.3); line-height: 1; text-transform: uppercase; letter-spacing: -.005em; color: #fff; }
+#who span { display: block; margin-top: calc(var(--u) * .4); font-family: var(--text); font-weight: 500; font-size: calc(var(--u) * 1.6); line-height: 1.28; color: #fff; }
+
+/* a stranger's passing line */
+.bark { position: absolute; left: 0; top: 0; z-index: 5; padding: calc(var(--u) * .2) calc(var(--u) * .75) calc(var(--u) * .16); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 1.8); line-height: 1.1; color: #fff; background: rgba(5, 8, 11, .88); border: 2px solid #fff; white-space: nowrap; opacity: 0; transition: opacity .16s; pointer-events: none; will-change: transform; }
+.bark.on { opacity: 1; }
+#who::before { content: ''; position: absolute; z-index: -1; left: 0; top: calc(var(--u) * -.8); bottom: calc(var(--u) * -.8); width: calc(100% + var(--u) * 8); background: linear-gradient(90deg, rgba(0, 0, 0, .72) 0%, rgba(0, 0, 0, .5) 62%, rgba(0, 0, 0, 0) 100%); }

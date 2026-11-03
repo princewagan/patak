@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom, blob, rand } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { Rain, Splashes } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
+import { cast } from '../engine/cast.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 
 const PI = Math.PI;
@@ -92,7 +94,7 @@ function coinMesh(r = 0.012, color = 0xc9b27a) {
 
 export default {
   dof: { focus: 1.05, aperture: 0.004, maxblur: 0.008 },
-  grade: { lift: [0.006, 0.004, 0.002], gain: [1.04, 0.97, 0.86], sat: 0.48, grain: 0.08, bloom: 0.36, bloomThreshold: 0.82, exposure: 0.9, vignette: 1.15, black: 0.035, gamma: 1.18, curve: 0.5 },
+  grade: { lift: [0.006, 0.004, 0.002], gain: [1.04, 0.97, 0.86], sat: 0.48, grain: 0.08, bloom: 0.36, bloomThreshold: 0.82, exposure: 1.12, vignette: 1.0, black: 0.025, gamma: 1.24, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -260,7 +262,7 @@ export default {
       const V = (x, y) => new THREE.Vector2(x, y), sc = lola.H / 1.7;
       const shawl = new THREE.Mesh(new THREE.LatheGeometry([V(0.046, 0.16), V(0.052, 0.12), V(0.062, 0.08), V(0.09, 0.045), V(0.15, -0.0), V(0.19, -0.06), V(0.205, -0.15), V(0.2, -0.27)].map(v => v.multiplyScalar(sc)), 28),
         new THREE.MeshStandardMaterial({ color: 0x6b5f4f, roughness: 0.97, normalMap: clothN, side: THREE.DoubleSide }));
-      shawl.scale.z = 0.72; shawl.castShadow = true; shawl.position.y = 0.005; lola.chest.add(shawl);
+      shawl.scale.z = 0.8; shawl.castShadow = true; shawl.position.y = 0.1 * sc; lola.chest.add(shawl);
     }
     lola.root.position.set(0.02, 0, 0.74); lola.root.rotation.y = PI; lola.pose('stoop', true); S.add(lola.root); this.people.push(lola);
     const purse = box(0.09, 0.06, 0.03, std(0x7a2d3a, { rough: 0.6 }), 0.012); purse.position.set(0, -0.08, 0.025); lola.arm.R.wr.add(purse); this.purse = purse;
@@ -304,13 +306,15 @@ export default {
 
   enter(engine) {
     this.engine = engine;
-    engine.rig.shake = 0.55; engine.rig.jolt = 0;
+    engine.rig.shake = 0.55; engine.rig.jolt = 0; engine.rig.pov = 1;
     engine.rig.set({ pos: [0.5, 1.58, 2.45], look: [0.0, 1.25, 0.0], fov: 44 });
     engine.dof({ target: this.lola.head, aperture: 0.004 });
     this.boardM.map = this.boardTex[0]; this.boardM.needsUpdate = true;
-    audio.rain(0.62, 0.12); audio.roof(0.42); audio.murmur(0.32, 'tv', 1150); audio.layer('engine', 0); audio.layer('traffic', 0);
+    if (!this.fill) { this.fill = new THREE.PointLight(0xffdcb8, 2.2, 5, 1.6); this.fill.position.set(0.3, 1.75, 1.75); this.scene.add(this.fill); }   // so Lola's back reads as a person, not a shape
+    audio.rain(0.62, 0.12); audio.roof(0.42); audio.murmur(0.32, 'tv', 1150); audio.layer('engine', 0); audio.layer('traffic', 0); audio.scape('sari');
+    prewarm(engine);
   },
-  exit() { audio.layer('roof', 0); audio.layer('tv', 0); audio.layer('drone', 0, null, 3); },
+  exit() { audio.layer('roof', 0); audio.layer('tv', 0); audio.layer('drone', 0, null, 3); audio.scape(null); },
 
   update(dt, t) {
     this.rain.update(t, this.engine.camera);
@@ -332,11 +336,13 @@ export default {
     const rig = this.engine.rig, E = this.engine, lola = this.lola, tin = this.tindera;
     const cam = (pos, look, dur = 2.5, fov, e) => rig.move({ pos, look, dur, fov, e });
     if (S.wallet == null) S.wallet = 160;
+    const C = cast(D); C.people({ 'Lola Ising': lola, Tindera: tin });
 
     cam([0.36, 1.58, 1.78], [0.0, 1.22, 0.0], 7, 42, 'out');
     await D.black(false, 1.6);
     await D.wait(1.6);
     lola.set({ shR: [-38, 0, -10], elR: [-60, 0, 0] });
+    C.intro('Lola Ising', 'Kapitbahay ninyo. Tatlong apo ang pinapakain niya.');
     await D.say('Lola Ising', "Isang kilo nga, 'neng.");
     lola.set({ shR: [-8, 0, -6], elR: [-30, 0, 0] });
 
@@ -355,7 +361,7 @@ export default {
     cam([0.58, 1.46, 1.38], [-0.02, LEDGE, 0.2], 2.0, 28);
     await D.wait(1.0);
     for (const c of this.ledgeCoins) { c.visible = true; audio.tone(5200 + Math.random() * 800, 0.18, { vol: 0.035 }); audio.tone(3600, 0.12, { vol: 0.02 }); await D.wait(0.42); }
-    await D.say('', 'Binilang ni Lola ang barya niya. ₱40.');
+    await D.say('', 'Binilang ni Lola ang barya niya. ₱40 lang. Kulang ng ₱18.');
     lola.expression({ sad: 0.6 }); lola.set({ neck: [40, 0, 0] });
     await D.say('Lola Ising', 'Kalahati na lang pala.');
 
@@ -386,7 +392,7 @@ export default {
 
     const devPick = new URLSearchParams(location.search).get('pick');
     if (devPick != null) setTimeout(() => document.querySelectorAll('#choice .opt')[+devPick]?.click(), 1800);
-    const p = await D.choose(['Dagdagan|Ikaw na ang magbayad ng kulang', "Umiwas|Bayaran lang ang sa'yo"], { id: 'bigas' });
+    const p = await D.choose(['Dagdagan|Ikaw na ang magbayad ng kulang', "Itabi|Pangkain mo pa 'yan bukas"], { timer: 12, id: 'bigas', def: 1 });
     S.bigas = p === 0;
     if (S.bigas) {
       S.wallet -= 20;

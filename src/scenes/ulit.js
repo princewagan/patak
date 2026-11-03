@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, sign, canvasTex, envFrom, blob } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
+import { cast } from '../engine/cast.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 
 /*
@@ -29,7 +31,7 @@ const GRADES = {
   // tender, warm against cool, but with the same crushed blacks as the rest of the game
   totoy: { lift: [0.0, 0.006, 0.016], gain: [1.06, 0.97, 0.86], sat: 1.12, grain: 0.075, bloom: 0.4, bloomThreshold: 0.8, exposure: 0.7, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
   weng: { lift: [0.0, 0.01, 0.018], gain: [0.94, 1.0, 1.04], sat: 1.05, grain: 0.06, bloom: 0.2, bloomThreshold: 0.9, exposure: 0.76, vignette: 1.1, black: 0.03, gamma: 1.15, curve: 0.45 },
-  lola: { lift: [0.004, 0.002, 0.0], gain: [1.08, 0.96, 0.8], sat: 1.12, grain: 0.075, bloom: 0.38, bloomThreshold: 0.8, exposure: 0.68, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
+  lola: { lift: [0.004, 0.002, 0.0], gain: [1.04, 0.97, 0.86], sat: 0.98, grain: 0.075, bloom: 0.38, bloomThreshold: 0.8, exposure: 0.68, vignette: 1.15, black: 0.035, gamma: 1.2, curve: 0.5 },
 };
 
 export default {
@@ -241,15 +243,15 @@ export default {
     // the bulb
     G.add(at(cyl(0.004, 0.004, 0.9, std(0x111)), 0, 2.15, 0));
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), glow(0xffd9a0, 6)); bulb.position.set(0, 1.68, 0); G.add(bulb);
-    const bl = this.bulb = new THREE.PointLight(0xffbf78, 7.5, 7, 1.6); bl.position.set(0, 1.6, 0); bl.castShadow = true; bl.shadow.mapSize.set(1024, 1024); bl.shadow.bias = -0.003; bl.shadow.radius = 3; G.add(bl);
+    const bl = this.bulb = new THREE.PointLight(0xffd6ae, 7.5, 7, 1.6); bl.position.set(0, 1.6, 0); bl.castShadow = true; bl.shadow.mapSize.set(1024, 1024); bl.shadow.bias = -0.003; bl.shadow.radius = 3; G.add(bl);
     G.add(new THREE.HemisphereLight(0x3a4a60, 0x1a140e, 0.45));
     // low table
     const ply = pbr('plywood', { repeat: [1, 1], color: 0xa58a68, rough: 0.7 });
     G.add(at(box(1.1, 0.04, 0.72, ply, 0.01), 0, 0.36, 0));
     for (const [x, z] of [[-0.5, -0.31], [0.5, -0.31], [-0.5, 0.31], [0.5, 0.31]]) G.add(at(box(0.05, 0.34, 0.05, std(0x5b4632)), x, 0.17, z));
     // pot, pitcher, a shared bowl of ulam
-    const pot = cyl(0.13, 0.11, 0.14, std(0x9da2a7, { metal: 0.8, rough: 0.35 }), 24); pot.position.set(0.0, 0.45, -0.12); G.add(pot);
-    G.add(at(cyl(0.135, 0.135, 0.015, std(0xa8adb2, { metal: 0.8, rough: 0.3 }), 24), 0.18, 0.38, -0.22));
+    const pot = cyl(0.13, 0.11, 0.14, std(0xb9bcbe, { metal: 0.3, rough: 0.45 }), 24); pot.position.set(0.41, 0.45, -0.24); G.add(pot);
+    G.add(at(cyl(0.135, 0.135, 0.015, std(0xc4c7c9, { metal: 0.3, rough: 0.4 }), 24), 0.41, 0.527, -0.24));
     const pm = new THREE.MeshPhysicalMaterial({ color: 0x6fa9cf, roughness: 0.2, transparent: true, opacity: 0.6 }); const pitcher = cyl(0.06, 0.07, 0.2, pm); pitcher.position.set(-0.35, 0.48, -0.2); G.add(pitcher); const hdl = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.01, 6, 12, PI), pm); hdl.position.set(-0.42, 0.49, -0.2); hdl.rotation.z = PI / 2; G.add(hdl);
     const bowl = cyl(0.08, 0.05, 0.05, std(0xeeeeea, { rough: 0.3 }), 20); bowl.position.set(0.16, 0.405, 0.05); G.add(bowl);
     G.add(at(cyl(0.07, 0.07, 0.005, std(0x6b3a1e, { rough: 0.4 }), 20), 0.16, 0.43, 0.05));
@@ -312,8 +314,9 @@ export default {
   enter(engine) {
     this.engine = engine;
     engine.rig.shake = 0.45; engine.rig.jolt = 0;
+    prewarm(engine);
   },
-  exit() { audio.layer('fan', 0); audio.layer('murmur', 0); audio.layer('traffic', 0); },
+  exit() { audio.layer('fan', 0); audio.layer('murmur', 0); audio.layer('traffic', 0); audio.scape(null); },
 
   update(dt, t) {
     for (const p of this.people) if (p.root.parent && p.root.parent.visible) p.update(dt, t);
@@ -348,7 +351,8 @@ export default {
   async totoy(D, S) {
     this.activate('totoy');
     const rig = this.engine.rig, boy = this.boy, gave = !!S.sobre;
-    audio.rain(0.45, 0.25); audio.traffic(0.25); audio.layer('murmur', 0); audio.layer('fan', 0);
+    audio.rain(0.32, 0.25); audio.traffic(0.12); audio.layer('murmur', 0); audio.layer('fan', 0); audio.scape('umaga', 0.7);
+    cast(D).remind('Totoy', "'Yung batang may sobre sa jeep.", 6);
     if (gave) {
       // under the awning, breakfast in both hands
       boy.root.position.set(0.35, 0, -0.95); boy.root.rotation.y = PI / 2 - 0.25;
@@ -385,7 +389,8 @@ export default {
   async weng(D, S) {
     this.activate('weng');
     const rig = this.engine.rig, helped = !!S.kaha;
-    audio.layer('rain', 0, null, 1); audio.traffic(0.15); audio.murmur(0.12); audio.layer('fan', 0);
+    audio.layer('rain', 0, null, 1); audio.layer('traffic', 0); audio.layer('murmur', 0); audio.layer('fan', 0); audio.scape('kanto', 0.6);
+    cast(D).remind('Panganay ni Ate Weng', "Anak ng kaherang kinulang ng ₱500.", 6);
     this.kid.root.visible = helped; this.kidShadow.visible = helped;
     this.ateWeng.root.visible = !helped; this.neighbor.root.visible = !helped;
     if (helped) {
@@ -437,10 +442,12 @@ export default {
   async lola(D, S) {
     this.activate('lola');
     const rig = this.engine.rig, helped = !!S.bigas, lola = this.lolaP;
-    audio.layer('traffic', 0); audio.layer('murmur', 0); audio.rain(0.35, 0.85); audio.fan(0.7);
+    audio.layer('traffic', 0); audio.layer('murmur', 0); audio.rain(0.28, 0.85); audio.fan(0.5); audio.scape('tahanan', 0.7);
+    cast(D).remind('Lola Ising', "'Yung kinulang sa bigas. Tatlo ang apo niya.", 6);
     this.lolaPlate.userData.rice.visible = helped;
     if (helped) {
       // at the table with them, eating
+      lola.shade(1);
       this.stool.position.set(0.0, 0.15, 0.68);
       lola.root.position.set(0.0, 0, 0.66); lola.root.rotation.y = PI;
       lola.pose('sit', true).set({ y: -0.46, spine: [16, 0, 0], neck: [16, 0, 0], shL: [-40, 0, 8], elL: [-50, 0, 0], shR: [-48, 0, -8], elR: [-62, 0, 0] }, true);
@@ -448,18 +455,18 @@ export default {
         const ph = (t * 0.25 + 0.6) % 1, raise = Math.max(0, Math.sin(Math.min(1, Math.max(0, (ph - 0.5) / 0.4)) * PI));
         p.arm.R.sh.rotation.x = p.target.shR.x - 0.5 * raise; p.arm.R.el.rotation.x = p.target.elR.x - 0.7 * raise;
       };
-      rig.set({ pos: [0.7, 1.3, 1.65], look: [0.0, 0.4, -0.05], fov: 36 });
-      rig.move({ pos: [0.42, 1.08, 1.25], look: [0.0, 0.42, 0.0], fov: 32, dur: 11, e: 'sine' });
-      this.engine.dof({ target: this.plates[1], aperture: 0.004, maxblur: 0.008 });
+      rig.set({ pos: [1.2, 1.62, 1.28], look: [-0.02, 0.4, 0.02], fov: 36 });
+      rig.move({ pos: [1.02, 1.46, 1.08], look: [-0.02, 0.42, 0.02], fov: 34, dur: 11, e: 'sine' });
+      this.engine.dof({ target: this.plates[1], aperture: 0.0025, maxblur: 0.006 });
     } else {
-      // a little apart, hands in her lap, watching them eat
-      this.stool.position.set(1.05, 0.15, 0.95);
-      lola.root.position.set(1.05, 0, 0.93); lola.root.rotation.y = Math.atan2(-1.05, -0.95);
+      // a little apart, in the shadow past the bulb, watching them eat. The empty plate is the shot, same framing as the full one.
+      this.stool.position.set(-0.95, 0.15, 1.0);
+      lola.root.position.set(-0.95, 0, 0.98); lola.root.rotation.y = Math.atan2(0.95, -0.98); lola.shade(0.32);
       lola.pose('sit', true).set({ y: -0.46, spine: [8, 0, 0], neck: [10, 0, 0], shL: [-22, 0, 12], elL: [-62, -25, 0], shR: [-22, 0, -12], elR: [-62, 25, 0] }, true);
       lola.anim = null; lola.look(this.kids[1].head, 0.6);
-      rig.set({ pos: [-0.75, 1.05, 1.35], look: [0.45, 0.5, 0.45], fov: 38 });
-      rig.move({ pos: [-0.5, 0.92, 1.12], look: [0.5, 0.52, 0.55], fov: 34, dur: 11, e: 'sine' });
-      this.engine.dof({ target: this.lolaPlate, aperture: 0.0045, maxblur: 0.009 });
+      rig.set({ pos: [1.2, 1.62, 1.28], look: [-0.12, 0.4, 0.14], fov: 36 });
+      rig.move({ pos: [1.02, 1.46, 1.08], look: [-0.14, 0.42, 0.16], fov: 34, dur: 11, e: 'sine' });
+      this.engine.dof({ target: this.lolaPlate, aperture: 0.0035, maxblur: 0.008 });
     }
     await D.black(false, 1.2);
     D.stamp('<b>Martes, 8:20 PM</b>', 4);

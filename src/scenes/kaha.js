@@ -3,7 +3,10 @@ import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUnifo
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom, blob } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { audio } from '../engine/audio.js';
+import { cast } from '../engine/cast.js';
 import { animate, moveTo, walkPath, loop } from '../engine/tween.js';
+import { phoneModel, chatScreen } from './phone.js';
+import { prewarm } from '../engine/prewarm.js';
 
 const PI = Math.PI;
 
@@ -53,7 +56,7 @@ function menuScreen(items, k = 0.5) {
 
 export default {
   dof: { focus: 1.4, aperture: 0.0028, maxblur: 0.007 },
-  grade: { lift: [0.0, 0.008, 0.004], gain: [0.84, 1.02, 0.88], sat: 1.0, grain: 0.075, bloom: 0.38, bloomThreshold: 0.84, exposure: 0.62, vignette: 1.15, ca: 0.0016, black: 0.035, gamma: 1.2, curve: 0.5 },
+  grade: { lift: [0.004, 0.006, 0.004], gain: [0.98, 1.0, 0.92], sat: 1.05, grain: 0.06, bloom: 0.38, bloomThreshold: 0.84, exposure: 1.4, vignette: 0.9, ca: 0.0016, black: 0.015, gamma: 1.34, curve: 0.5 },
 
   async build(engine) {
     RectAreaLightUniformsLib.init();
@@ -268,18 +271,7 @@ export default {
     this.clip.add(at(box(0.08, 0.03, 0.015, std(0xb8bcc0, { metal: 0.9, rough: 0.3 })), 0, 0.15, 0.01));
 
     // phone for the break (silent branch)
-    const phT = canvasTex(320, 640, (c, w, h) => {
-      c.fillStyle = '#0e1013'; c.fillRect(0, 0, w, h);
-      c.fillStyle = '#e8edf2'; c.font = '600 22px Inter'; c.fillText('Anak ko', 24, 56);
-      c.fillStyle = '#2a2f36'; c.fillRect(0, 76, w, 2);
-      c.fillStyle = '#2d3640'; c.beginPath(); c.roundRect(20, 110, 230, 90, 18); c.fill();
-      c.fillStyle = '#dfe6ee'; c.font = '19px Inter'; c.fillText('Ma, yung project ko po', 36, 146); c.fillText('bukas na po deadline', 36, 176);
-      c.fillStyle = '#2f7d5a'; c.beginPath(); c.roundRect(50, 240, 252, 128, 18); c.fill();
-      c.fillStyle = '#f2fff8'; c.font = '19px Inter';
-      ['Anak, sa Sabado na lang', "'yung pambili ng project", 'mo ha.'].forEach((l, i) => c.fillText(l, 66, 278 + i * 28));
-      c.fillStyle = '#7f8a94'; c.font = '15px Inter'; c.fillText('2:41 PM', 240, 392);
-    });
-    this.phone = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.145, 0.008), [std(0x111), std(0x111), std(0x111), std(0x111), new THREE.MeshBasicMaterial({ map: phT }), std(0x111)]);
+    this.phone = phoneModel(chatScreen, { gain: 0.62 });
     this.phone.visible = false; S.add(this.phone);
     this.phoneLight = new THREE.PointLight(0xc8dcff, 0.0, 0.45, 2); S.add(this.phoneLight);
 
@@ -365,13 +357,14 @@ export default {
 
   enter(engine) {
     this.engine = engine;
-    engine.rig.shake = 0.45; engine.rig.jolt = 0;
+    engine.rig.shake = 0.45; engine.rig.jolt = 0; engine.rig.pov = 1;
     engine.rig.set({ pos: [0.5, 1.6, -1.3], look: [-0.9, 1.15, -0.7], fov: 46 });
-    audio.rain(0.12, 0.9); audio.hum(1.2); audio.murmur(0.9, 'murmur', 650); audio.fryer(0.8);
+    audio.rain(0.1, 0.9); audio.hum(1.2); audio.murmur(0.34, 'murmur', 650); audio.fryer(0.6); audio.scape('kaha');
     audio.layer('roof', 0); audio.layer('engine', 0); audio.layer('traffic', 0);
     this.beepStop = loop(() => { if (Math.random() < 0.6) audio.beep(); }, 2.7);
+    prewarm(engine);
   },
-  exit() { ['hum', 'murmur', 'fryer'].forEach(n => audio.layer(n, 0)); this.beepStop?.(); },
+  exit() { ['hum', 'murmur', 'fryer'].forEach(n => audio.layer(n, 0)); audio.scape(null); audio.duck(1, 1); this.beepStop?.(); },
 
   update(dt, t) {
     for (const p of this.people) p.update(dt, t);
@@ -387,6 +380,7 @@ export default {
     const cam = (pos, look, dur = 2.4, fov, e) => rig.move({ pos, look, dur, fov, e });
     const you = new THREE.Vector3(0.5, 1.6, -1.3);
     const forceSilent = beat === 'silent', forceSpeak = beat === 'speak';
+    const C = cast(D); C.people({ "Ma'am Joy": joy, 'Ate Weng': weng, Mark: mark });
 
     // Joy counts the open drawer, Weng watching
     joy.pose('counting', true); joy.look(this.drawer, 0.8);
@@ -400,12 +394,14 @@ export default {
     await D.black(false, 1.6);
     cam([0.5, 1.6, -1.35], [-0.95, 1.05, -0.65], 5.5, 40, 'sine');
     setTimeout(() => E.dof({ target: this.drawer, aperture: 0.004 }), 2600);
+    C.intro("Ma'am Joy", 'Manager ninyo. Siya ang magsasabi kung ire-renew ka.');
     await D.say('', "Pagkatapos ng lunch rush, binilang ni Ma'am Joy ang kaha ni Ate Weng.");
     joy.anim = null; joy.set({ shL: [-40, 0, 14], elL: [-80, -20, 0], neck: [20, 0, 0] });
     // Joy at the drawer, then she straightens up
     E.dof({ target: joy.head, aperture: 0.003 });
     await cam([0.5, 1.6, -1.3], [-1.0, 1.4, -1.0], 1.6, 40);
     joy.look(weng.head, 0.9); joy.pose('standRelaxed');
+    C.intro('Ate Weng', 'Kahera. Contractual din, tulad mo. May mga anak.');
     await D.say("Ma'am Joy", 'Kulang ng ₱500.');
     // Weng: hands together, cap brim shading her eyes
     weng.set({ shL: [-30, 0, 4], shR: [-30, 0, -4], elL: [-70, 0, -30], elR: [-70, 0, 30], neck: [16, 0, 0] }); weng.look(null); weng.expression({ worry: 1 });
@@ -424,26 +420,31 @@ export default {
     // the refund receipt lying by the register
     E.dof({ target: this.receipt, aperture: 0.006 });
     await cam([-0.5, 1.25, -0.76], [-0.6, 1.03, -0.5], 1.6, 30);
-    await D.say('', "Alam mo kung saan napunta. Kanina, si Ma'am Joy mismo ang nag-approve ng ₱500 na refund sa kahang 'yon. Hindi niya ni-log.");
+    await D.say('', "Alam mo kung saan napunta. Kanina, si Ma'am Joy mismo ang nag-refund ng ₱500 sa kahang 'yon.");
+    await D.say('', "Hindi niya ni-log. Kaya ngayon, si Ate Weng ang lumalabas na kulang.");
     // Mark leans in from your right
     mark.anim = null; mark.pose('stand'); mark.look(null);
     walkPath(mark, [[0.9, 0, -1.9], [0.28, 0, -1.74]], 1.4).then(() => { mark.root.rotation.y = 0.55; mark.set({ neck: [10, 0, 0], spine: [8, 0, 0] }); mark.look(new THREE.Vector3(0.5, 1.55, -1.3), 0.9); });
     E.dof({ target: weng.head, aperture: 0.005 });
     await cam([0.5, 1.6, -1.3], [-1.1, 1.4, -1.8], 1.6, 56);
+    C.intro('Mark', 'Katrabaho mo. Contractual din.');
     await D.say('Mark', "Pre, 'wag ka nang makialam. Renewal mo next week.");
     mark.look(weng.head, 0.6);
+    await D.say('', 'Kapag nagsalita ka, baka hindi ka na ma-renew. Kapag nanahimik ka, ₱500 ang mawawala kay Ate Weng.', { hold: 5 });
     // Joy turns to you
     joy.look(you, 1); joy.root.rotation.y = 1.3; weng.look(you, 0.6);
     // the question lands on the money, not on a face
     const dw = this.drawer.getWorldPosition(new THREE.Vector3());
     E.dof({ target: this.drawer, aperture: 0.007 });
     animate(k => { joy.shade(1 - 0.8 * k); weng.shade(1 - 0.8 * k); }, 1.2);
+    audio.duck(0.35, 2.5);   // the room seems to go quiet when she asks
     await cam([dw.x + 0.55, dw.y + 0.5, dw.z - 0.35], dw.toArray(), 1.4, 22);
     await D.say("Ma'am Joy", 'May alam ka ba dito?', { hold: 2.2 });
 
-    let pick = await D.choose(['Magsalita|Sabihin ang refund', 'Manahimik|Yumuko sa tray'], { timer: 8, id: 'kaha', def: 1 });
+    let pick = await D.choose(['Magsalita|Sabihin ang refund', 'Manahimik|May renewal ka pa next week'], { timer: 8, id: 'kaha', def: 1 });
     if (forceSilent) pick = 1; if (forceSpeak) pick = 0;
     animate(k => { joy.shade(0.2 + 0.8 * k); weng.shade(0.2 + 0.8 * k); }, 1.0);
+    audio.duck(1, 3);
     S.kaha = pick === 0;
 
     if (S.kaha) {
@@ -540,13 +541,21 @@ export default {
         await D.black(false, 0.8);
         cam(c1.toArray(), pp.toArray(), 5, 28, 'sine');
         // insert: the screen, from just behind her eyes
-        const ins = hp.clone().lerp(pp, 0.35).add(new THREE.Vector3(0, 0.04, 0)).addScaledVector(back, 0.02);
-        setTimeout(() => { rig.set({ pos: ins.toArray(), look: pp.toArray(), fov: 24 }); rig.move({ pos: ins.clone().lerp(pp, 0.15).toArray(), look: pp.toArray(), fov: 22, dur: 4, e: 'sine' }); E.dof({ target: this.phone, aperture: 0.004 }); }, 2600); }
+        const face = hp.clone().sub(pp).normalize(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.phone.quaternion), at = pp.clone().addScaledVector(up, 0.018);
+        const ins = at.clone().addScaledVector(face, 0.27).addScaledVector(up, 0.028);
+        D.wait(2.6).then(() => {
+          weng.head.visible = false; // the camera is where her eyes are
+          rig.set({ pos: ins.toArray(), look: at.toArray(), fov: 30 });
+          rig.move({ pos: at.clone().addScaledVector(face, 0.24).addScaledVector(up, 0.022).toArray(), look: at.toArray(), fov: 30, dur: 4, e: 'sine' });
+          E.dof({ target: this.phone, aperture: 0.0009, maxblur: 0.003 }); E.bloom.strength = 0.03;
+        });
+      }
       await D.say('', "Sa break, nakita mo siyang nagte-text: \"Anak, sa Sabado na lang 'yung pambili ng project mo ha.\"", { hold: 6.4 });
       D.patak('Ate Weng', '₱500 ang ikinaltas');
     }
     await D.wait(3.0);
     await D.black(true, 1.2);
+    weng.head.visible = true;
   },
 
   /* Part Two: the memo is still on the wall */

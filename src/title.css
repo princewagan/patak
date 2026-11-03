@@ -1,0 +1,68 @@
+/* Main menu. Only the PATAK logo is serif; everything else is tight, heavy condensed sans. */
+#title { position: absolute; inset: 0; z-index: 10; overflow: hidden; background: #000; pointer-events: none; transition: opacity .55s ease .62s; font-family: var(--hud); }
+#title.gone { opacity: 0; pointer-events: none; }
+#title canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 1; }
+
+/* ---------- logo: stands on the water, with its reflection under it ---------- */
+#title .logo { position: absolute; left: calc(var(--u) * 5.5); bottom: calc(var(--u) * 10.5); line-height: 1; opacity: 0; transform: translateY(calc(var(--u) * 1.5)); transition: opacity 1.6s ease .3s, transform 2.2s cubic-bezier(.16, .8, .24, 1) .3s; }
+#title h1 { font-family: var(--serif); font-weight: 500; font-size: calc(var(--u) * 18.4); line-height: .78; letter-spacing: -.036em; color: #fff; text-shadow: 0 0 calc(var(--u) * 3) rgba(150, 210, 240, .22); }
+#title .mirror { position: absolute; left: 0; top: 0; font-family: var(--serif); font-weight: 500; font-size: calc(var(--u) * 18.4); line-height: .78; letter-spacing: -.036em; color: #dceffa; transform: scaleY(-.6); transform-origin: 50% 89%; opacity: .34; filter: url(#water) blur(1px); -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 92%); mask-image: linear-gradient(to top, #000 10%, transparent 92%); pointer-events: none; }
+#title:not(.boot) .logo { opacity: 1; transform: none; }
+
+/* ---------- loading ---------- */
+#title .boot { position: absolute; right: calc(var(--u) * 3.4); bottom: calc(var(--u) * 2.8); font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 1.8); color: rgba(255, 255, 255, .75); opacity: 0; transition: opacity .5s; }
+#title.boot .boot { opacity: 1; animation: titlepulse 1.6s ease-in-out infinite; }
+@keyframes titlepulse { 50% { opacity: .45; } }
+
+/* ---------- press any key ---------- */
+#title .press { position: absolute; right: calc(var(--u) * 5.5); bottom: calc(var(--u) * 12); font-weight: 700; font-size: calc(var(--u) * 2.5); line-height: 1; color: #fff; text-transform: uppercase; opacity: 0; transition: opacity .4s; }
+#title.gate .press { opacity: 1; animation: titlepress 2.2s ease-in-out .9s infinite; }
+@keyframes titlepress { 50% { opacity: .35; } }
+
+/* ---------- the menu: a staggered, slanted stack ---------- */
+#title .actions { position: absolute; right: calc(var(--u) * 5.5); bottom: calc(var(--u) * 12.5); display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * .55); }
+#title .actions button { --shift: 0px; position: relative; isolation: isolate; display: block; padding: calc(var(--u) * .62) calc(var(--u) * 1.9) calc(var(--u) * .55); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 3.2); line-height: 1; letter-spacing: -.005em; text-transform: uppercase; white-space: nowrap; color: rgba(255, 255, 255, .78); text-shadow: 0 calc(var(--u) * .1) calc(var(--u) * .9) rgba(0, 0, 0, .75); outline: none; opacity: 0; pointer-events: none; transform: translateX(calc(var(--u) * 6)) skewX(-9deg); transition: opacity .34s ease, transform .5s cubic-bezier(.16, .9, .24, 1), color .08s, font-size .16s cubic-bezier(.2, 1, .3, 1); }
+#title .actions button:nth-child(1) { --shift: 0px; transition-delay: .02s; }
+#title .actions button:nth-child(2) { --shift: calc(var(--u) * -.9); transition-delay: .07s; }
+#title .actions button:nth-child(3) { --shift: calc(var(--u) * .5); transition-delay: .12s; }
+#title .actions button:nth-child(4) { --shift: calc(var(--u) * -.4); transition-delay: .17s; }
+#title .actions button:nth-child(5) { --shift: calc(var(--u) * .9); transition-delay: .22s; }
+#title.menuon .actions button { opacity: 1; pointer-events: auto; transform: translateX(var(--shift)) skewX(-9deg); }
+#title.menuon .actions button.sel { font-size: calc(var(--u) * 4.6); color: #05080b; text-shadow: none; transform: translateX(calc(var(--shift) - var(--u) * 1.2)) skewX(-9deg); transition-delay: 0s; }
+#title .actions button:disabled { color: rgba(255, 255, 255, .55); cursor: default; }
+/* the highlight is two slanted plates: a blue one thrown out behind a white one */
+#title .actions button::before, #title .actions button::after { content: ''; position: absolute; inset: 0; z-index: -1; transform-origin: 100% 50%; transform: scaleX(0); transition: transform .2s cubic-bezier(.16, .9, .24, 1); }
+#title .actions button::before { background: #fff; clip-path: polygon(calc(var(--u) * 1.1) 0, 100% 0, 100% calc(100% - var(--u) * .7), calc(100% - var(--u) * .7) 100%, 0 100%); }
+#title .actions button::after { z-index: -2; background: var(--hot); left: calc(var(--u) * -.75); right: calc(var(--u) * .55); top: calc(var(--u) * .4); bottom: calc(var(--u) * -.34); clip-path: polygon(0 18%, 100% 0, 96% 100%, calc(var(--u) * 1.4) 88%); transition-delay: .035s; }
+#title .actions button.sel::before, #title .actions button.sel::after { transform: none; }
+
+#title .blurb { position: absolute; right: calc(var(--u) * 5.5); bottom: calc(var(--u) * 7.9); max-width: calc(var(--u) * 46); text-align: right; font-family: var(--text); font-weight: 500; font-size: calc(var(--u) * 1.5); line-height: 1.3; color: var(--soft); text-shadow: 0 0 calc(var(--u) * .7) #000; opacity: 0; transition: opacity .3s; }
+#title.menuon .blurb { opacity: 1; }
+
+/* ---------- bottom strip ---------- */
+#title .foot { position: absolute; left: calc(var(--u) * 5.5); right: calc(var(--u) * 5.5); bottom: calc(var(--u) * 2.8); display: flex; justify-content: space-between; align-items: center; font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 1.5); color: rgba(255, 255, 255, .7); opacity: 0; transition: opacity .8s .3s; }
+#title.menuon .foot { opacity: 1; }
+#title .foot .k { display: flex; gap: calc(var(--u) * 1.8); }
+#title .foot .k span { display: flex; align-items: center; gap: calc(var(--u) * .5); }
+#title .foot b { display: grid; place-items: center; min-width: calc(var(--u) * 1.9); height: calc(var(--u) * 1.9); padding: 0 calc(var(--u) * .35); border: 1.5px solid rgba(255, 255, 255, .55); font-weight: 700; font-size: calc(var(--u) * 1.2); line-height: 1; }
+
+/* ---------- starting the game: a black slash wipes the menu off ---------- */
+#title .wipe { position: absolute; top: -10%; bottom: -10%; left: -35%; width: 170%; background: #000; transform: translateX(-108%) skewX(-14deg); pointer-events: none; z-index: 3; }
+#title.gone .wipe { transform: translateX(0) skewX(-14deg); transition: transform .62s cubic-bezier(.7, 0, .2, 1); }
+#title.gone .actions button { transform: translateX(calc(var(--u) * 12)) skewX(-9deg); opacity: 0; transition: transform .34s ease-in, opacity .3s; }
+
+/* ---------- credits ---------- */
+#credits { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; background: rgba(2, 4, 6, .86); backdrop-filter: blur(10px); pointer-events: auto; font-family: var(--text); }
+#credits.on { display: flex; }
+#credits .box { width: min(calc(var(--u) * 66), 90vw); }
+#credits h2 { font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 4.2); line-height: 1; text-transform: uppercase; margin-bottom: calc(var(--u) * .4); }
+#credits .names { font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.3); color: #fff; margin-bottom: calc(var(--u) * 2); }
+#credits h3 { font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 1.7); color: var(--hot); margin-bottom: calc(var(--u) * .5); }
+#credits p { font-size: calc(var(--u) * 1.32); line-height: 1.42; color: var(--soft); margin-bottom: calc(var(--u) * .9); }
+#credits button { margin-top: calc(var(--u) * .8); padding: calc(var(--u) * .5) calc(var(--u) * 1.8); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 2); line-height: 1.1; text-transform: uppercase; }
+
+@media (max-width: 760px) {
+  #title .actions button { font-size: 5.2vw; }
+  #title.menuon .actions button.sel { font-size: 7vw; }
+}
+#credits p b { font-weight: 600; color: #fff; }

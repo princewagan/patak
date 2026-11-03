@@ -5,6 +5,8 @@ import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 import { makeStreet, Traffic } from './street.js';
+import { makePhone } from './phone.js';
+import { prewarm } from '../engine/prewarm.js';
 
 const D2R = THREE.MathUtils.degToRad;
 const PI = Math.PI;
@@ -112,7 +114,7 @@ export default {
     };
     const LX = -0.73, RX = 0.73;
     this.l1 = P({ h: 1.7, skin: 'brown', top: 0x3b4a3a, bottom: 0x22262b, hair: 'short', build: 1.05, longSleeve: true }, LX, 1.45, 'sitSlump', { neck: [32, 0, 14] });
-    this.l2 = P({ h: 1.58, skin: 'light', top: 0xdedad2, bottom: 0x2b3448, hair: 'long', build: 0.9 }, LX, 0.78, 'sit', { neck: [30, 0, 0], shL: [-26, 0, 10], elL: [-100, 10, 0], shR: [-22, 0, -10], elR: [-96, -10, 0] });
+    this.l2 = P({ h: 1.58, skin: 'light', top: 0xa9a59c, bottom: 0x2b3448, hair: 'long', build: 0.9 }, LX, 0.78, 'sit', { neck: [30, 0, 0], shL: [-26, 0, 10], elL: [-100, 10, 0], shR: [-22, 0, -10], elR: [-96, -10, 0] });
     this.l3 = P({ h: 1.7, skin: 'dark', top: 0x7b6a52, bottom: 0x3a3a36, hair: 'short', cap: 0x2a3550, build: 1.15 }, LX, 0.1, 'sit', { shL: [-28, 0, 22], shR: [-28, 0, -22], elL: [-105, 0, -40], elR: [-105, 0, 40], neck: [10, 0, 0] });
     this.l4 = P({ h: 1.62, skin: 'tan', top: 0x5a4d6b, bottom: 0x2c2c30, hair: 'short', hairColor: 0x5c5853, build: 1.0 }, LX, -0.57, 'sitSlump', { neck: [24, 0, -10] });
     this.l5 = P({ h: 1.55, skin: 'tan', top: 0x9c3b4a, bottom: 0x1f2329, hair: 'bun', build: 1.05 }, LX, -1.24, 'sit', { neck: [-4, -30, 0] });
@@ -122,7 +124,7 @@ export default {
     this.r5 = P({ h: 1.68, skin: 'brown', top: 0x8a8070, bottom: 0x2d2a25, hair: 'short', build: 1.1 }, RX, -1.45, 'sit', {});
     // phone glow on l2's face
     const ph = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.14, 0.01), glow(0xbfd6ff, 1.4)); ph.position.set(0, -0.06, 0.03); ph.rotation.x = -0.6; this.l2.arm.L.wr.add(ph);
-    const phl = new THREE.PointLight(0xa8c4ff, 0.25, 0.8, 2); phl.position.set(0, 0.05, 0.08); this.l2.arm.L.wr.add(phl);
+    const phl = new THREE.PointLight(0xa8c4ff, 0.08, 0.8, 2); phl.position.set(0, 0.05, 0.08); this.l2.arm.L.wr.add(phl);
     // ale's bayong bag + umbrella
     const bay = box(0.32, 0.26, 0.16, std(0x9a7a46, { rough: 1 })); bay.position.set(0, 0.6, 0.27); this.ale.root.add(bay);
     const umb = cyl(0.03, 0.012, 0.8, std(0x1c2a3c, { rough: 0.3 })); umb.position.set(0.22, 0.4, 0.33); umb.rotation.z = 0.2; this.ale.root.add(umb);
@@ -133,19 +135,10 @@ export default {
     you.root.position.set(RX, 0, 1.3); you.root.rotation.y = -PI / 2; J.add(you.root);
     you.head.visible = false; you.arm.L.sh.visible = false; you.arm.R.sh.visible = false;
     this.people.push(you);
-    // your phone with the scam text
-    const scam = canvasTex(256, 512, (c, w, h) => {
-      c.fillStyle = '#0d0f12'; c.fillRect(0, 0, w, h);
-      c.fillStyle = '#e9edf2'; c.font = '600 20px Inter'; c.fillText('6:42', 18, 34);
-      c.fillStyle = '#1f2630'; c.beginPath(); c.roundRect(14, 70, w - 28, 170, 14); c.fill();
-      c.fillStyle = '#9fb3c8'; c.font = '600 15px Inter'; c.fillText('Mensahe · +63 917 ••• 4821', 28, 98);
-      c.fillStyle = '#e9edf2'; c.font = '17px Inter';
-      ['CONGRATS! Nanalo ang', 'number mo ng P25,000.', 'I-claim dito bago', 'mag-expire: bit.ly/...'].forEach((l, i) => c.fillText(l, 28, 130 + i * 25));
-    });
-    const phone = this.phone = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.15, 0.009), [std(0x111), std(0x111), std(0x111), std(0x111), new THREE.MeshBasicMaterial({ map: scam }), std(0x111)]);
-    phone.position.set(0.05, -0.1, -0.34); phone.rotation.set(-0.18, -0.12, 0.02); this.held = new THREE.Group(); this.held.add(phone); S.add(this.held);
-    const thumbL = new THREE.PointLight(0xbfd6ff, 0.35, 0.9, 2); thumbL.position.set(0.05, -0.05, -0.25); phone.parent.add(thumbL); this.phoneLight = thumbL; thumbL.visible = false;
-    phone.visible = false;
+    // your phone, in your right hand
+    this.held = new THREE.Group(); S.add(this.held);
+    const phone = this.phone = makePhone(S);
+    phone.position.copy(this.PH_LAP); phone.quaternion.copy(this.phoneQ(this.PH_LAP)); phone.visible = false; S.add(phone);
     // envelopes on laps
     this.laps = [];
     for (const p of [this.l1, this.l2, this.l3, this.l4, this.l5, this.ale, this.r3, this.r4, this.r5]) {
@@ -186,9 +179,10 @@ export default {
 
   enter(engine) {
     this.engine = engine;
-    engine.rig.shake = 0.7; engine.rig.jolt = 1;
+    engine.rig.shake = 0.7; engine.rig.jolt = 1; engine.rig.pov = 1;
     engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.2], fov: 50 });
     audio.rain(0.8, 0.35); audio.roof(0.7); audio.engine(1, 1); audio.traffic(0.6);
+    prewarm(engine);
   },
   exit() { audio.layer('roof', 0); audio.layer('engine', 0); audio.layer('traffic', 0); },
 
@@ -213,8 +207,57 @@ export default {
     dp.needsUpdate = true;
     for (const p of this.people) p.update(dt, t);
     this.held.position.copy(this.engine.camera.position); this.held.quaternion.copy(this.engine.camera.quaternion);
+    this.phone.update(dt, t, this.engine.rig.road);
     // light sway of everyone with the jeep
     this.jeep.rotation.z = Math.sin(t * 0.7) * 0.004 * this.speed / 7;
+  },
+
+  /* ================= the phone ================= */
+  EYE: new THREE.Vector3(0.66, 1.13, 1.3),
+  PH_LAP: new THREE.Vector3(0.42, 0.66, 1.24),
+  PH_READ: new THREE.Vector3(0.415, 0.955, 1.285),
+  /** how the phone sits in the hand at a given spot: screen toward the eyes, a little off square */
+  phoneQ(at, tilt = 1) {
+    const m = new THREE.Matrix4().lookAt(this.EYE, at, new THREE.Vector3(0, 1, 0));
+    return new THREE.Quaternion().setFromRotationMatrix(m).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0.05 * tilt, 0.07 * tilt, -0.05 * tilt)));
+  },
+  /** the screen has to stay readable from the back of a classroom, so the film look eases off while he reads */
+  readingLook(k) {
+    const E = this.engine, u = E.final.uniforms;
+    E.bloom.strength = this.grade.bloom + (0.02 - this.grade.bloom) * k;
+    u.uGrain.value = this.grade.grain + (0.022 - this.grade.grain) * k;
+    u.uCA.value = 0.0018 + (0.0002 - 0.0018) * k;
+  },
+  async textMessage(D) {
+    const P = this.phone, E = this.engine, rig = E.rig;
+    const lap = this.PH_LAP, read = this.PH_READ, q0 = this.phoneQ(lap, 0), q1 = this.phoneQ(read);
+    P.visible = true; P.setScreen('messages'); P.wake(1, 0.25); P.pos.copy(lap); P.quaternion.copy(q0);
+    // it buzzes on his lap
+    const buzz = () => { audio.tone(170, .22, { type: 'square', vol: .035 }); P.buzz = 0.26; };
+    buzz(); D.wait(0.34).then(buzz);
+    await D.wait(0.9);
+    // eyes drop first, the hand comes up to meet them
+    rig.move({ look: read.clone().add(new THREE.Vector3(0.012, -0.017, 0)).toArray(), dur: 1.9, fov: 50 });
+    await D.wait(0.25);
+    E.dof({ target: P.pos, aperture: 0.0012, maxblur: 0.005 });
+    animate(k => this.readingLook(k), 1.6);
+    await animate(k => { P.pos.lerpVectors(lap, read, k); P.quaternion.slerpQuaternions(q0, q1, k); }, 1.8, 'head');
+    // he leans in and reads
+    await D.wait(0.9);
+    rig.move({ pos: [0.63, 1.1, 1.298], look: read.clone().add(new THREE.Vector3(0.006, 0.02, 0)).toArray(), dur: 3.4, fov: 31 });
+    await D.wait(3.3);
+    await D.say('', 'Text na naman.', { hold: 2.4 });
+    // back gesture: the thumb drags the conversation off the screen
+    await P.swipe();
+    await D.wait(0.25);
+    rig.move({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], dur: 2.4, fov: 50 });
+    await D.wait(0.2);
+    E.dof({ focus: 1.2, aperture: 0.0035, maxblur: 0.007 });
+    animate(k => this.readingLook(1 - k), 1.6);
+    P.wake(0, 0.5);
+    await animate(k => { P.pos.lerpVectors(read, lap, k); P.quaternion.slerpQuaternions(q1, q0, k); }, 1.5, 'head');
+    P.visible = false;
+    await D.wait(0.7);
   },
 
   /* ================= the chapter ================= */
@@ -303,21 +346,13 @@ export default {
   async play(D, S, beat) {
     if (beat === 'montage') return this.montage(D, S);
     if (beat === 'again') return this.again(D, S);
-    if (beat === 'choice') { this.resetBoy(); this.myEnv.visible = true; this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 }); await D.black(false, 0.5); await this.stageChoice(D); return D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10 }); }
+    if (beat === 'phone') { this.resetBoy(); await D.black(false, 0.5); await D.wait(0.4); return this.textMessage(D); }
+    if (beat === 'choice') { this.resetBoy(); this.myEnv.visible = true; this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 }); await D.black(false, 0.5); await this.stageChoice(D); return D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10 }); }
     const boy = this.boy;
     this.resetBoy();
     await D.black(false, 2.0);
     await D.wait(0.8);
-    // phone buzzes: a scam text
-    this.phone.visible = true; this.phoneLight.visible = true;
-    this.engine.dof({ focus: 0.34, aperture: 0.006 });
-    audio.tone(180, .25, { type: 'square', vol: .03 }); audio.tone(180, .25, { type: 'square', vol: .03, delay: .35 });
-    await this.cam([0.66, 1.13, 1.3], [0.2, 0.85, 1.32], 1.6, 46);
-    await D.wait(1.0);
-    await D.say('', 'Text na naman.');
-    this.phone.visible = false; this.phoneLight.visible = false; this.engine.dof({ focus: 1.2, aperture: 0.0035 });
-    await this.cam([0.66, 1.13, 1.3], [-1, 0.98, 1.1], 2.2, 50);
-    await D.wait(0.6);
+    await this.textMessage(D);
 
     await this.board(D);
     boy.pose('crouch'); boy.root.rotation.y = -PI / 2; boy.look(this.l1.head, 0.6);
@@ -346,7 +381,7 @@ export default {
     await D.say('', "₱160 ang laman ng wallet mo. Pamasahe at pagkain mo na 'yan hanggang Biyernes.");
 
     await this.collect(D);
-    const pick = await D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10, id: 'sobre', def: 1 });
+    const pick = await D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10, id: 'sobre', def: 1 });
     const gave = pick === 0;
     S.sobre = gave;
     if (gave) {
@@ -404,7 +439,7 @@ export default {
     await D.black(false, 1.4);
     await D.wait(1.6);
     await this.collect(D);
-    const pick = await D.choose(['Magbigay|Lagyan ng bente', 'Hayaan|Ibalik nang walang laman'], { timer: 10, id: 'ulit', def: 1 });
+    const pick = await D.choose(['Magbigay|Lagyan ng bente', "Ibalik|Sindikato naman 'yan"], { timer: 10, id: 'ulit', def: 1 });
     if (pick === 0) { this.coin.visible = true; await animate(k => { this.coin.position.y = -0.16 - k * 0.12; this.coin.rotation.x = 1.2 + k * 3; }, 0.9, 'in'); audio.coin(); this.coin.visible = false; this.coin.position.y = -0.16; }
     await D.black(true, 1.4);
     return pick;

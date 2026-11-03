@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { phoneModel, alarmScreen } from './phone.js';
+import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom } from '../engine/kit.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
@@ -37,19 +39,6 @@ function sheetTex() {
       c.fillStyle = 'rgba(160,70,80,.35)'; for (let k = 0; k < 5; k++) { c.beginPath(); c.ellipse(x + ox + 32 + Math.cos(k * 1.256) * 17, y + 32 + Math.sin(k * 1.256) * 17, 8, 5, k * 1.256, 0, 7); c.fill(); }
     }
     for (let i = 0; i < 2000; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`; c.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
-  });
-}
-
-function phoneScreen() {
-  return canvasTex(256, 520, (c, w, h) => {
-    c.fillStyle = '#05070a'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#9aa7b6'; c.font = '600 18px Inter'; c.textAlign = 'center'; c.fillText('Martes', w / 2, 70);
-    c.fillStyle = '#eef2f6'; c.font = '200 76px Inter'; c.fillText('10:05', w / 2, 150);
-    c.fillStyle = '#1b2230'; c.beginPath(); c.roundRect(18, 200, w - 36, 92, 16); c.fill();
-    c.fillStyle = '#f2a33a'; c.beginPath(); c.arc(50, 246, 13, 0, 7); c.fill();
-    c.fillStyle = '#eef2f6'; c.textAlign = 'left'; c.font = '600 17px Inter'; c.fillText('Alarm', 74, 236);
-    c.font = '15px Inter'; c.fillStyle = '#b8c3d0'; c.fillText('5:30 AM · bukas', 74, 262);
-    c.fillStyle = '#3a4250'; c.fillRect(w / 2 - 50, h - 30, 100, 5);
   });
 }
 
@@ -163,8 +152,8 @@ export default {
     polo.add(at(box(0.16, 0.06, 0.042, std(0xe6c64a, { rough: 0.8 })), 0, -0.05, 0.002));
     polo.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.006, 4, 24, PI), std(0x333333)), 0, -0.02, 0));
     // the phone and the money on the sheet
-    const phone = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.009, 0.15), [std(0x111), std(0x111), new THREE.MeshBasicMaterial({ map: phoneScreen() }), std(0x111), std(0x111), std(0x111)]);
-    phone.position.set(-0.3, 0.115, 0.42); phone.rotation.y = 0.35; S.add(phone);
+    const phone = phoneModel(alarmScreen, { gain: 0.9 });
+    phone.position.set(-0.3, 0.115, 0.42); phone.rotation.set(-Math.PI / 2, 0, 0.35); S.add(phone);
     const pl = new THREE.PointLight(0xb6c8ff, 0.12, 0.9, 2); pl.position.set(-0.3, 0.3, 0.42); S.add(pl);
     this.money = new THREE.Group(); S.add(this.money);
 
@@ -193,13 +182,14 @@ export default {
 
   enter(engine) {
     this.engine = engine;
-    engine.rig.shake = 0.45; engine.rig.jolt = 0;
+    engine.rig.shake = 0.45; engine.rig.jolt = 0; engine.rig.pov = 1;
     engine.rig.set({ pos: [-0.5, 1.02, 1.12], look: [-0.36, 0.1, 0.55], fov: 40 });
     engine.dof({ focus: 0.62, aperture: 0.006 });
     audio.layer('engine', 0); audio.layer('traffic', 0); audio.layer('tv', 0);
-    audio.rain(0.4, 0.55); audio.roof(0.35); audio.fan(0.7);
+    audio.rain(0.3, 0.7); audio.roof(0.2); audio.fan(0.7); audio.scape('gabi', 0.8);
+    prewarm(engine);
   },
-  exit() { audio.layer('fan', 0); audio.layer('roof', 0); },
+  exit() { audio.layer('fan', 0); audio.layer('roof', 0); audio.scape(null); },
 
   update(dt, t) {
     this.rain.update(t, this.engine.camera);
@@ -222,7 +212,7 @@ export default {
     // the rain gets heavy; look up at the window
     E.dof({ focus: 2.6, aperture: 0.004 });
     rig.move({ pos: [-0.5, 1.1, 1.2], look: [0.62, 1.25, -1.1], dur: 3.2, fov: 52 });
-    audio.rain(1, 0.4); audio.roof(1.0);
+    audio.rain(0.9, 0.5); audio.roof(0.8); audio.scape('gabi', 0.5);
     await animate(k => { for (const g of this.glass) g.userData.u.uAmt.value = 0.6 + k * 0.35; this.rain.uniforms.uSpeed.value = 10 + k * 4; }, 2.0);
     this.flash.intensity = 14; setTimeout(() => audio.thunder(), 900);
     await D.say('', 'Umulan nang malakas.');

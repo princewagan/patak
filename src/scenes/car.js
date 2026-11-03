@@ -1,11 +1,14 @@
 import * as THREE from 'three';
+import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
+import { cast } from '../engine/cast.js';
 import { animate } from '../engine/tween.js';
 import { photo3d } from '../engine/photo3d.js';
 import { glassPass } from '../engine/glass.js';
+import { povArm, dropsTexture } from './labas.js';
 
 /* Aug 17, 2026: Prince's car. Camera = Keira in the passenger seat, at the origin, looking down -Z.
    The view through the windshield is the real photos (depth-mapped), so the photo cameras also sit at the origin. */
@@ -62,8 +65,31 @@ export default {
     // driver seat back + headrest
     C.add(at(box(0.5, 0.75, 0.12, fabric, 0.05), -0.74, -0.35, 0.22));
     C.add(at(box(0.26, 0.2, 0.1, fabric, 0.05), -0.74, 0.18, 0.24));
-    // door + side window frame (right)
-    C.add(at(box(0.06, 0.6, 1.2, trim), 0.78, -0.55, -0.1));
+    // passenger door, hinged at its front edge; everything on it swings out together
+    const door = this.door = new THREE.Group(); door.position.set(0.74, 0, -0.78); C.add(door);
+    const panelM = std(0x55585e, { rough: 0.62 }), softM = std(0x74777d, { rough: 0.85 });
+    door.add(at(box(0.07, 0.72, 1.24, panelM, 0.02), 0.02, -0.6, 0.62));
+    door.add(at(box(0.09, 0.05, 0.52, softM, 0.018), -0.02, -0.36, 0.72));                 // armrest
+    door.add(at(box(0.05, 0.3, 0.72, softM, 0.02), -0.02, -0.56, 0.7));                    // cloth insert
+    this.doorHandle = box(0.018, 0.05, 0.13, std(0xa3a9ae, { rough: 0.25, metal: 0.9 }), 0.006); this.doorHandle.position.set(-0.03, -0.28, 0.3); door.add(this.doorHandle);
+    door.add(at(box(0.05, 0.03, 1.18, trim), 0.02, 0.43, 0.6), at(box(0.05, 0.68, 0.05, trim), 0.02, 0.09, 1.2), at(box(0.05, 0.68, 0.06, trim), 0.02, 0.09, 0.02));
+    door.add(at(box(0.06, 0.05, 1.2, trim, 0.01), 0.02, -0.235, 0.6));
+    // side glass with rain on it (a drawn texture, the windshield pass only covers the front)
+    const dropsT = dropsTexture();
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.64), new THREE.MeshBasicMaterial({ map: dropsT, transparent: true, depthWrite: false, opacity: 0.85, side: THREE.DoubleSide }));
+    pane.position.set(0.02, 0.1, 0.62); pane.rotation.y = -PI / 2; door.add(pane);
+    // pillar behind the door, roof edge, the seat she is leaving
+    C.add(at(box(0.09, 1.0, 0.1, trim), 0.76, -0.02, 0.5), at(box(0.1, 0.1, 1.5, fabric), 0.82, 0.46, -0.2));
+    // what is out that side: the wet side of the street, only ever seen soft through glass and rain
+    const sideM = new THREE.MeshBasicMaterial({ map: canvasTex(1024, 512, (c, w, h) => {
+      const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#d7e1ea'); g.addColorStop(0.46, '#c3cfd9'); g.addColorStop(0.47, '#5f6a70'); g.addColorStop(0.62, '#4b5358'); g.addColorStop(0.63, '#646b6e'); g.addColorStop(1, '#3b4145'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+      c.filter = 'blur(26px)';
+      for (const [x, wd, top, col] of [[20, 300, 90, '#6f6c68'], [340, 240, 40, '#85827b'], [600, 420, 110, '#63666a'], [860, 200, 60, '#77746f']]) { c.fillStyle = col; c.fillRect(x, top, wd, h * 0.56 - top); }
+      for (let i = 0; i < 14; i++) { c.fillStyle = 'rgba(46,54,48,.4)'; c.beginPath(); c.arc(Math.random() * w, h * 0.46 + Math.random() * 40, 30 + Math.random() * 50, 0, 7); c.fill(); }
+    }), side: THREE.BackSide, fog: false, color: new THREE.Color(2.4, 2.4, 2.4) });
+    const side = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 16, 48, 1, true, PI * 0.19, PI * 0.57), sideM); side.position.y = 0.6; side.visible = false; S.add(side); this.sideWorld = side;
+    this.arm = povArm(); S.add(this.arm);
+    this.dayLight = new THREE.PointLight(0xdfe8f2, 2.2, 7, 1.2); this.dayLight.position.set(1.5, 0.3, -0.1); S.add(this.dayLight);
 
     // ---- Prince, driving (light blue shirt + lanyard, from the photos) ----
     const prince = this.prince = new Person({ h: 1.72, skin: 'tan', top: 0x8ab6dc, bottom: 0x23262b, hair: 'messy', build: 0.95, sleeve: 0.14 });
@@ -97,9 +123,10 @@ export default {
     engine.rig.shake = 0.35; engine.rig.jolt = 0.25;
     engine.rig.set({ pos: [0, 0, 0], look: [-0.12, -0.06, -2], fov: 42 });
     this.show('street');
-    audio.rain(0.9, 0.75); audio.roof(0.45); audio.engine(0.35, 0.5);
+    prewarm(engine);
+    audio.rain(0.5, 0.8); audio.roof(0.3); audio.carEngine(0.8, 0.5); audio.scape('kotse');
   },
-  exit() { audio.layer('roof', 0); audio.layer('engine', 0); },
+  exit() { audio.layer('roof', 0); audio.layer('carEngine', 0); audio.scape(null); },
 
   update(dt, t, raw) {
     if (this.view) { this.view.update(t); this.view.position.z += this.drive * dt; }
@@ -114,6 +141,7 @@ export default {
     const cam = (look, dur = 2.5, fov) => rig.move({ look, dur, fov });
     this.drive = 0.5; g.uWipe.value = 1; g.uWipeT.value = 1.6;
     await D.black(false, 2.4);
+    cast(D).remind('Keira at Prince', 'Kami na ito. Ikaw ngayon si Keira. Si Prince ang nagda-drive.', 7);
     await D.say('', 'Malakas ang ulan. Nag-shortcut si Prince sa loob ng isang village sa San Francisco del Monte.');
     await D.wait(1.2);
     // every exit flooded
@@ -130,25 +158,45 @@ export default {
     await D.black(true, 0.5); this.show('street'); this.drive = 0; await D.black(false, 0.8);
     await D.say('', 'Mataas pala ang gitna ng village. Lahat ng labasan, pababa. Lahat, lubog.');
     // parked
-    g.uWipe.value = 0; audio.engine(0.3, 0.2);
+    g.uWipe.value = 0; audio.carEngine(0.7, 0.2);
     await D.say('', 'Nag-park kami. Naka-on ang makina.');
     await cam([-0.3, -0.12, -2], 3, 38);
     await D.wait(1.6);
-    const pick = await D.choose(['Maghintay|Dito na lang sa kotse', 'Bumaba|Lumabas sa ulan'], { id: 'baba' });
-    if (pick === 0) {
-      await cam([-0.12, -0.04, -2], 2.2, 42);
-      await D.say('', 'Naghintay kami. Hindi tumitigil ang ulan.');
-      await animate(k => { this.needle.rotation.z = 0.35 + k * 0.5; }, 3, 'inOut');
-      this.prince.look(new THREE.Vector3(0.1, 0.0, 0.2), 0.8);
-      await cam([-0.7, 0.0, -0.5], 2.0, 40);
-      await D.say('Prince', "Sayang 'yung gas.");
-      this.prince.look(null);
-      await cam([-0.1, -0.05, -2], 2.0, 42);
-      await D.say('Keira', 'Baba muna tayo?');
-    }
-    // the door
-    audio.doorThud(); audio.rain(1.2, 0.0); audio.layer('roof', 0, null, 0.3);
-    await rig.move({ look: [1.5, -0.1, -0.6], dur: 1.6, fov: 46 });
+    const pick = await D.choose(['Maghintay|Dito na lang sa kotse', 'Bumaba|Lumabas sa ulan'], { timer: 12, id: 'baba', def: 0 });
+    // whatever he picks, the game shows what we really did, then we go down anyway
+    await D.stats('Ang pinili namin', [
+      { label: 'Maghintay', pct: 100, who: 'Keira · Prince', you: pick === 0 },
+      { label: 'Bumaba', pct: 0, you: pick === 1 },
+    ]);
     await D.black(true, 1.0);
+    audio.rain(0.5, 0.2); audio.layer('roof', 0.2);
+    await D.lines([
+      { t: 'Naghintay kami sa kotse. Nanood ng isang episode ng <i>Brooklyn Nine-Nine</i>.', alone: true },
+      { t: 'Pagkalipas ng 30 minuto, nagbigay ng suhestiyon si Keira.', alone: true },
+    ]);
+    await D.lines([{ t: '“Maybe we should go down.”', hold: 2.8 }, { t: '“Yeah, you’re right.”', hold: 2.8 }]);
+    await D.black(false, 1.0);
+    // the door: she turns to it, pulls the handle, it swings out, rain and daylight come in
+    audio.layer('carEngine', 0, null, 1.2);
+    const u = this.engine.final.uniforms, arm = this.arm;
+    this.prince.look(null);
+    this.sideWorld.visible = true;
+    await rig.move({ pos: [0.07, -0.03, -0.02], look: [1.0, -0.3, -0.34], dur: 2.0, fov: 52, e: 'inOut' });
+    await D.wait(0.2);
+    const w = new THREE.Vector3(), el = new THREE.Vector3(), reach = rest => {
+      w.set(-0.03, -0.27, 0.3); this.door.localToWorld(w);
+      el.set(0.3, -0.7, 0.1).applyQuaternion(this.engine.camera.quaternion).add(this.engine.camera.position);
+      if (rest) w.lerp(el.clone().add(new THREE.Vector3(0.05, -0.4, 0.05)), rest);
+      arm.reach(w, el, 1.2);
+    };
+    reach(1); arm.visible = true;
+    await animate(k => reach(1 - k), 0.75, 'inOut');
+    audio.tone(1200, 0.03, { vol: 0.08 }); audio.noiseHit(0.05, { f: 2400, vol: 0.14 }); audio.tone(240, 0.08, { vol: 0.2, to: 150, delay: 0.05 });
+    await animate(k => { this.door.rotation.y = 0.05 * k; reach(); }, 0.16, 'out');
+    audio.rain(1.2, 0.0); audio.layer('roof', 0, null, 0.4);
+    await D.wait(0.18);
+    animate(k => { this.door.rotation.y = 0.05 + 0.72 * k; this.dayLight.intensity = 2.2 + 14 * k; reach(); }, 1.4, 'out');
+    await animate(k => { const w = k * k * k; u.uLift.value.set(this.grade.lift[0] + (1 - this.grade.lift[0]) * w, this.grade.lift[1] + (1 - this.grade.lift[1]) * w, this.grade.lift[2] + (1 - this.grade.lift[2]) * w); }, 1.5, 'linear');
+    arm.visible = false;
   },
 };
