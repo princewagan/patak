@@ -271,6 +271,36 @@ export function handGeometry() {
   return handCache;
 }
 
+/* ---------- the same hand closed round a bar. The bar crosses the palm on a slant, the way a hammer handle does:
+   it passes through (GRIP.x, GRIP.y, 0) of the left hand (mirror x for the right) along (0, -sin tilt, cos tilt),
+   nearer the fingertips on the index side, nearer the wrist on the little-finger side ---------- */
+export const GRIP = { x: -0.031, y: -0.099, tilt: 0.42, bar: 0.016 };
+let gripCache = null;
+/** the point on a ring (centre c, radius R) a bone of length L reaches from p, going round the way fingers close */
+function onRing(p, L, cx, cy, R) {
+  const dx = p[0] - cx, dy = p[1] - cy, d = Math.hypot(dx, dy);
+  const a = Math.acos(clamp((d * d + R * R - L * L) / (2 * d * R), -1, 1)), th = Math.atan2(dy, dx) - a;
+  return [cx + R * Math.cos(th), cy + R * Math.sin(th)];
+}
+export function gripGeometry() {
+  if (gripCache) return gripCache;
+  const P = [[ell(0, -0.05, 0.002, 0.0165, 0.05, 0.041)], [cone([0, 0.016, 0], [0, -0.02, 0], 0.0225, 0.026, 1.14), 0.016]];
+  const { x: cx, y: cy, tilt, bar } = GRIP, tn = Math.tan(tilt), R = bar / Math.cos(tilt) + 0.0086;
+  for (const [z, l] of [[0.028, 0.073], [0.0095, 0.082], [-0.0095, 0.077], [-0.027, 0.06]]) {
+    const oy = cy - z * tn; let p = [-0.002, -0.094, z];
+    [0.42, 0.33, 0.25].forEach((f, i) => {
+      const q = onRing(p, l * f, cx, oy, R), Q = [q[0], q[1], z];
+      P.push([cone(p, Q, 0.0092 - i * 0.0008, 0.0084 - i * 0.0008), i === 0 ? 0.008 : 0.002]);
+      p = Q;
+    });
+  }
+  // the thumb comes round the other way and lies along the bar
+  P.push([cone([-0.004, -0.024, 0.03], [-0.028, -0.06, 0.05], 0.0135, 0.0105), 0.012], [cone([-0.028, -0.06, 0.05], [-0.052, -0.088, 0.044], 0.0105, 0.0085), 0.002]);
+  const m = surfaceNets(blend(P), [-0.075, -0.15, -0.05], [0.03, 0.02, 0.085], 0.0048, { smooth: 1 });
+  gripCache = { L: finish(m), R: finish(mirrorX(m)) };
+  return gripCache;
+}
+
 /* ---------- feet: ankle at the origin, toes toward +Z ---------- */
 const footCache = new Map();
 export const FOOT = { ankleH: 0.062, ballZ: 0.118, ballY: -0.05, heelZ: -0.05 };

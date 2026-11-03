@@ -17,7 +17,15 @@ const JOINT_BONE = {
 };
 const V = () => new THREE.Vector3(), Q = () => new THREE.Quaternion();
 const DOWN = new THREE.Vector3(0, -1, 0);
-const CURL = { 0: -0.28, 1: -0.5, 2: -0.32 };   // resting fingers, knuckle to tip
+/* how a hand closes, per digit (thumb, index, middle, ring, little), knuckle to tip, in radians of curl */
+const R3 = [-0.28, -0.5, -0.32];
+const GRIPS = {
+  rest: [[0, 0, 0], R3, R3, R3, R3],
+  fist: [[-0.3, -0.62, -0.5], [-1.15, -1.3, -0.8], [-1.22, -1.36, -0.82], [-1.28, -1.4, -0.85], [-1.32, -1.42, -0.85]],   // round a thin handle
+  hold: [[-0.22, -0.42, -0.3], [-0.72, -0.9, -0.55], [-0.78, -0.95, -0.58], [-0.82, -0.98, -0.6], [-0.86, -1.0, -0.6]],   // round a cup or a bag's neck
+  pinch: [[-0.12, -0.4, -0.38], [-0.5, -0.68, -0.38], [-0.62, -0.78, -0.45], [-0.95, -1.15, -0.7], [-1.05, -1.2, -0.72]], // paper between the thumb and the first two fingers
+  open: [[0, -0.06, -0.04], [-0.06, -0.1, -0.06], [-0.07, -0.11, -0.06], [-0.09, -0.12, -0.07], [-0.1, -0.14, -0.08]],
+};
 const FOOT_H = 0.062;   // ankle height of the procedural person
 const models = new Map(), loaded = new Map();
 
@@ -129,12 +137,19 @@ export class RealBody {
       this.links.push({ n, j, A, B: Bq });
     }
 
-    // relaxed fingers
+    // eyes turn up or down on their own (person.eyeUp, radians): a bent old body looks up at you with the eyes, not the head
+    this.eyes = ['Bip01_LEye', 'Bip01_REye'].map(n => g.getObjectByName(n)).filter(Boolean)
+      .map(e => ({ e, rest: e.quaternion.clone(), axis: new THREE.Vector3(1, 0, 0).applyQuaternion(W.get(e).clone().invert()) }));
+    this.eyeV = 0;
+
+    // fingers keep their rest, so a hand can close round whatever it holds (see grip)
+    this.curl = o.curl ?? 1;
+    this.fingers = { L: [], R: [] }; this.gripTo = { L: 'rest', R: 'rest' }; this.gripBusy = 2;
     g.traverse(n => {
-      if (!n.isBone) return;
-      const f = /Finger([1-4])(\d?)$/.exec(n.name);
-      if (f) n.rotateZ(CURL[f[2] || '0'] * (o.curl ?? 1));
+      const f = n.isBone && /_([LR])_Finger([0-4])(\d?)$/.exec(n.name);
+      if (f) this.fingers[f[1]].push({ n, d: +f[2], k: +(f[3] || 0), q0: n.quaternion.clone(), a: GRIPS.rest[+f[2]][+(f[3] || 0)] * this.curl });
     });
+    this.fingerPose(1);
 
     this.pelvisRest = pelvis.position.clone();
     this.pelvisParentInv = pelvis.parent.getWorldQuaternion(Q()).invert().multiply(g.getWorldQuaternion(Q()));
@@ -180,6 +195,27 @@ export class RealBody {
   /** first person: this body has no head to get in front of the camera */
   hideHead() { this.headBone.scale.setScalar(1e-3); }
 
+  /** a frame on the head in metres: Y up, Z out of the face, origin at the top of the neck. For the mouth, the eyes */
+  headFrame() {
+    if (this._hf) return this._hf;
+    const f = this._hf = new THREE.Group(); this.headBone.add(f);
+    f.quaternion.copy(this.headRest.clone().invert()); f.scale.setScalar(this.capScale);
+    return f;
+  }
+
+  /** close a hand: 'rest' | 'fist' | 'hold' | 'pinch' | 'open'. The fingers travel there, they don't jump. */
+  grip(side, kind = 'rest') { if (GRIPS[kind] && this.gripTo[side] !== kind) { this.gripTo[side] = kind; this.gripBusy = 40; } }
+  fingerPose(k) {
+    for (const s of ['L', 'R']) {
+      const G = GRIPS[this.gripTo[s]];
+      for (const f of this.fingers[s]) {
+        const want = G[f.d][f.k] * (this.gripTo[s] === 'rest' ? this.curl : 1);
+        f.a += (want - f.a) * k;
+        f.n.quaternion.copy(f.q0); f.n.rotateZ(s === 'R' && this.gripTo[s] !== 'rest' ? -f.a : f.a);   // the right hand's finger joints are mirrored: the same turn would bend them backward
+      }
+    }
+  }
+
   setMorph(key, v) { for (const m of this.morph) { const i = m.morphTargetDictionary[key]; if (i !== undefined) m.morphTargetInfluences[i] = v; } }
 
   sync() {
@@ -193,6 +229,11 @@ export class RealBody {
     const v = this._v.set(p.hips.position.x, p.hips.position.y - this.hipsRest, p.hips.position.z).divideScalar(this.k).applyQuaternion(this.pelvisParentInv);
     this.pelvis.position.copy(this.pelvisRest).add(v);
     for (const s of ['L', 'R']) { const on = p.arm[s].sh.visible ? 1 : 1e-3; if (this.upper[s].scale.x !== on) this.upper[s].scale.setScalar(on); }
+    const up = p.eyeUp || 0;
+    if (up || this.eyeV) {
+      this.eyeV += (up - this.eyeV) * 0.12; if (Math.abs(up - this.eyeV) < 1e-4) this.eyeV = up;
+      for (const x of this.eyes) x.e.quaternion.copy(x.rest).multiply(q.setFromAxisAngle(x.axis, -this.eyeV));
+    }
     for (const s of ['L', 'R']) {
       const wr = p.arm[s].wr;
       if (wr.children.length < 2) continue;            // nothing held but the (hidden) hand mesh
@@ -203,6 +244,7 @@ export class RealBody {
       wr.parent.worldToLocal(d.add(this._w.setFromMatrixPosition(wr.parent.matrixWorld)));
       wr.position.add(d);
     }
+    if (this.gripBusy > 0) { this.fingerPose(0.22); this.gripBusy--; }
     if (this.morph.length) {
       const e = p.expr || {}, lid = (p.eyes?.[0]?.scale.y ?? 1) < 0.5 ? 1 : 0;
       this.blinkV += (lid - this.blinkV) * 0.55;
@@ -212,7 +254,7 @@ export class RealBody {
       this.setMorph('AK_30_MouthFrownLeft', sa * 0.8); this.setMorph('AK_31_MouthFrownRight', sa * 0.8);
       this.setMorph('AK_03_BrowInnerUp', Math.min(1, sa * 0.8 + wo));
       const now = performance.now() / 1000, on = !!p.talking;
-      const jaw = on ? 0.1 + 0.3 * Math.abs(Math.sin(now * 8.3) * Math.sin(now * 3.1 + 1)) : 0;
+      const jaw = on ? 0.1 + 0.3 * Math.abs(Math.sin(now * 8.3) * Math.sin(now * 3.1 + 1)) : (p.chew || 0);   // chew: set by a scene while someone eats
       this.talk += (jaw - this.talk) * 0.4;
       this.setMorph('AK_25_JawOpen', this.talk);
     }

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { prewarm } from '../engine/prewarm.js';
-import { pbr, std, glow, box, cyl, at, canvasTex, envFrom } from '../engine/kit.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { pbr, std, glow, box, cyl, at, canvasTex, envFrom, tex } from '../engine/kit.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
@@ -77,13 +79,211 @@ function wiper(armLen, bladeLen) {
   return G;
 }
 
-/** a steering wheel with a hub and three spokes, not a bare ring */
-function wheelModel(mat, hubM) {
-  const G = new THREE.Group();
-  G.add(new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.017, 12, 56), mat));
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.07, 0.04, 28), hubM); hub.rotation.x = PI / 2; hub.position.z = -0.01; G.add(hub);
-  for (const a of [0, PI, PI * 1.5]) { const s = box(0.13, 0.026, 0.01, mat, 0.004); s.position.set(Math.cos(a) * 0.115, Math.sin(a) * 0.115, -0.006); s.rotation.z = a; G.add(s); }
+const WHEEL_R = 0.19;
+const UPG = new THREE.Vector3(0, 0.75, 0.47).normalize(), NG = new THREE.Vector3(0, -UPG.z, UPG.y);   // up the windshield; off it, into the cabin
+const GLASS = { x: -0.22, y: -0.33, z: -1.02, w: 0.98, l: 0.88 };                                     // the windshield in car space (glass.js uG0/uGW/uGL)
+
+function cabinMats() {
+  const grain = rep => tex('/tex/leather_red_03_nor.jpg', { repeat: rep, srgb: false });
+  const mat = (color, rough, nrm, ns = 0.3) => new THREE.MeshStandardMaterial({ color, roughness: rough, normalMap: nrm || null, normalScale: new THREE.Vector2(ns, ns) });
+  return {
+    dash: Object.assign(mat(0x1e1f22, 0.78, grain([7, 7]), 0.35), { envMapIntensity: 2 }),
+    door: mat(0x55585e, 0.74, grain([8, 8]), 0.3),
+    trim: mat(0x4a4c51, 0.66),
+    wheel: Object.assign(mat(0x232427, 0.38, grain([40, 3]), 0.75), { envMapIntensity: 5 }),
+    visor: Object.assign(mat(0x222326, 0.55, grain([9, 9]), 0.3), { envMapIntensity: 3 }),
+    pad: mat(0x191a1c, 0.74, grain([10, 10]), 0.25),
+    cloth: pbr('denim_fabric', { noDiff: true, repeat: [7, 7], color: 0x6a6d73, normalScale: 0.7 }),
+    headliner: std(0x77736d, { rough: 0.97 }),
+    black: std(0x0e0f10, { rough: 0.5 }),
+    satin: std(0x1b1c1e, { rough: 0.4, metal: 0.3 }),
+    rubber: std(0x080808, { rough: 0.9 }),
+    carpet: std(0x232427, { rough: 1 }),
+    stitch: std(0x5a5c60, { rough: 0.85 }),
+    chrome: std(0xd2d6da, { rough: 0.16, metal: 1 }),
+    mirror: std(0xa4abb2, { rough: 0.03, metal: 1, env: 1.6 }),
+    paint: new THREE.MeshPhysicalMaterial({ color: 0x8f979f, metalness: 0.6, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.4 }),
+  };
+}
+
+/** a rounded bar from a to b, w0 → w1 wide; its flat side (t thick) faces +z of whatever it hangs in */
+function strut(a, b, w0, w1, t, mat) {
+  const L = a.distanceTo(b), W = Math.max(w0, w1), g = new RoundedBoxGeometry(W, L, t, 3, Math.min(W, t) * 0.45), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) * (w0 + (w1 - w0) * (p.getY(i) / L + 0.5)) / W);
+  const m = new THREE.Mesh(g, mat); m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+  return m;
+}
+function roundRect(w, h, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+/** smooth normals across a rounded box's faces, after its vertices were pushed around */
+function smooth(g) { g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g); g.computeVertexNormals(); return g; }
+
+/** the dashboard: one moulded piece, drawn as its side profile and run the width of the car. Car space, metres. */
+function dashboard(M) {
+  const G = new THREE.Group(), s = new THREE.Shape();
+  // profile: u = how far forward of you, v = height
+  s.moveTo(1.12, -0.352);
+  s.bezierCurveTo(0.95, -0.338, 0.8, -0.326, 0.71, -0.329);       // the top, running under the glass
+  s.bezierCurveTo(0.655, -0.332, 0.632, -0.362, 0.628, -0.402);    // the rolled lip
+  s.bezierCurveTo(0.622, -0.47, 0.63, -0.55, 0.655, -0.6);         // the face
+  s.bezierCurveTo(0.668, -0.63, 0.62, -0.66, 0.6, -0.7);           // under it, the knee panel
+  s.lineTo(0.585, -0.84); s.lineTo(0.64, -0.92); s.lineTo(1.12, -0.92); s.closePath();
+  const m = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 1.9, curveSegments: 16, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.025, bevelOffset: -0.025, bevelSegments: 5 }), M.dash);
+  m.rotation.y = PI / 2; m.position.x = -1.19; m.castShadow = m.receiveShadow = true; G.add(m);
+  // defroster slots along the foot of the glass
+  const slots = canvasTex(512, 32, (c, w, h) => { c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.fillStyle = '#fff'; for (let x = 4; x < w - 4; x += 8) c.fillRect(x, 5, 4, h - 10); }, { srgb: false });
+  const def = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.045), new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6, alphaMap: slots, transparent: true, depthWrite: false }));
+  def.rotation.x = -PI / 2; def.position.set(-0.25, -0.333, -0.97); G.add(def);
+  // the round vent at your end of the dash
+  const v = new THREE.Group(); v.position.set(-1.09, -0.43, -0.617); G.add(v);
+  v.add(new THREE.Mesh(new THREE.TorusGeometry(0.042, 0.007, 10, 40), M.satin), at(new THREE.Mesh(new THREE.CircleGeometry(0.04, 32), M.rubber), 0, 0, -0.012));
+  for (let i = -2; i <= 2; i++) v.add(at(box(0.074 * Math.sqrt(1 - (i / 2.7) ** 2), 0.0035, 0.018, M.black), 0, i * 0.0145, -0.004, 0, -0.35));
+  v.add(at(box(0.009, 0.013, 0.012, M.satin, 0.003), 0, 0, 0.006));
+  // a clock in the middle of the dash
   return G;
+}
+
+/** gauges in their hood, in front of the wheel. Origin under your eye; `set(kph, rpm, fuel, temp)` moves the needles. */
+function cluster(M) {
+  const G = new THREE.Group(), W = 0.2, H = 0.18, RY = 0.075, w = 0.18, ry = 0.06, N = 28, BASE = -0.338, FZ = -0.86;
+  const arch = (sw, sr, rev) => { const pts = [new THREE.Vector2(-sw, 0), new THREE.Vector2(-sw, H)]; for (let i = 1; i < N; i++) { const a = PI - PI * i / N; pts.push(new THREE.Vector2(sw * Math.cos(a), H + sr * Math.sin(a))); } pts.push(new THREE.Vector2(sw, H), new THREE.Vector2(sw, 0)); return rev ? pts.reverse() : pts; };
+  // the hood: an arch-shaped band pushed back into the dash, its lip rolled
+  const hood = new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape([...arch(W, RY), ...arch(w, ry, true)]), { depth: 0.19, curveSegments: 4, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.009, bevelOffset: -0.009, bevelSegments: 5 }), M.visor);
+  hood.position.set(0, BASE, -0.875); G.add(hood);
+  // the face, lit from behind
+  const k = 1024 / (2 * w), FH = Math.round((H + ry) * k), X = x => (x + w) * k, Y = y => (H + ry - y) * k;
+  const D = { tach: [-0.1, 0.186, 0.038], speed: [0, 0.192, 0.045], combo: [0.1, 0.186, 0.038] };
+  const face = canvasTex(1024, FH, c => {
+    const bg = c.createLinearGradient(0, 0, 0, FH); bg.addColorStop(0, '#0a0b0d'); bg.addColorStop(0.7, '#121418'); bg.addColorStop(1, '#0b0c0e'); c.fillStyle = bg; c.fillRect(0, 0, 1024, FH);
+    const dial = ([dx, dy, dr], { a0, a1, n, sub = 1, labels, red, unit, small }) => {
+      const x = X(dx), y = Y(dy), r = dr * k, P = (a, rr) => [x + Math.sin(a) * rr, y - Math.cos(a) * rr];
+      if (!small) { const g = c.createRadialGradient(x, y, r * 0.1, x, y, r); g.addColorStop(0, '#16181b'); g.addColorStop(1, '#0b0c0e'); c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, PI * 2); c.fill(); }
+      if (red) { c.strokeStyle = '#d8342a'; c.lineWidth = r * 0.08; c.beginPath(); c.arc(x, y, r * 0.86, red[0] - PI / 2, red[1] - PI / 2); c.stroke(); }
+      for (let i = 0, S = n * sub; i <= S; i++) {
+        const a = a0 + (a1 - a0) * i / S, major = i % sub === 0, [x0, y0] = P(a, r * (major ? 0.76 : 0.83)), [x1, y1] = P(a, r * 0.93);
+        c.strokeStyle = '#e8ebee'; c.lineWidth = major ? r * 0.035 : r * 0.016; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+        if (major && labels?.[i / sub]) { const [lx, ly] = P(a, r * 0.6); c.fillStyle = '#e8ebee'; c.font = `600 ${Math.round(r * (small ? 0.24 : 0.2))}px "Barlow Condensed"`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(labels[i / sub], lx, ly); }
+      }
+      if (unit) { c.font = `500 ${Math.round(r * 0.11)}px Barlow`; c.fillStyle = '#8f989e'; c.textAlign = 'center'; c.fillText(unit, x, y + r * 0.3); }
+      return [x, y, r];
+    };
+    const d135 = 135 * PI / 180;
+    const [sx, sy, sr] = dial(D.speed, { a0: -d135, a1: d135, n: 9, sub: 2, labels: [0, 20, 40, 60, 80, 100, 120, 140, 160, 180].map(String), unit: 'km/h' });
+    // odometer
+    c.fillStyle = '#020303'; c.fillRect(sx - sr * 0.32, sy + sr * 0.44, sr * 0.64, sr * 0.17);
+    c.fillStyle = '#9fb7a4'; c.font = `500 ${Math.round(sr * 0.13)}px "Barlow Condensed"`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('1 4 8 2 0 7', sx, sy + sr * 0.53);
+    dial(D.tach, { a0: -d135, a1: d135, n: 8, sub: 2, labels: '012345678'.split(''), red: [-d135 + 2 * d135 * 6.5 / 8, d135], unit: 'x1000r/min' });
+    // fuel on top, water temperature underneath, one face
+    const cb = D.combo, f50 = 50 * PI / 180;
+    const [cx, cy, cr] = dial(cb, { a0: -f50, a1: f50, n: 2, sub: 2, labels: ['E', '', 'F'], small: false });
+    dial(cb, { a0: PI + f50, a1: PI - f50, n: 2, sub: 1, labels: ['C', '', 'H'], small: true });
+    c.fillStyle = '#8f989e'; c.font = `600 ${Math.round(cr * 0.16)}px Barlow`; c.fillText('FUEL', cx, cy - cr * 0.28); c.fillText('TEMP', cx, cy + cr * 0.3);
+    // turn arrows, off
+    c.strokeStyle = '#1f3a28'; c.lineWidth = 3;
+    for (const s of [-1, 1]) { const ax = X(s * 0.06), ay = Y(0.13); c.beginPath(); c.moveTo(ax + s * 16, ay); c.lineTo(ax - s * 2, ay - 12); c.lineTo(ax - s * 2, ay + 12); c.closePath(); c.stroke(); }
+  });
+  const fg = new THREE.ShapeGeometry(new THREE.Shape(arch(w, ry)), 1), uv = fg.attributes.uv, pp = fg.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pp.getX(i) + w) / (2 * w), pp.getY(i) / (H + ry));
+  G.add(at(new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ map: face, color: new THREE.Color(1.15, 1.15, 1.15) })), 0, BASE, FZ));
+  // bezels, needles and their caps
+  const needles = {};
+  for (const [name, [dx, dy, dr]] of Object.entries(D)) {
+    G.add(at(new THREE.Mesh(new THREE.TorusGeometry(dr + 0.002, 0.0022, 8, 64), M.chrome), dx, BASE + dy, FZ + 0.003));
+    const mk = (len, col) => {
+      const s = new THREE.Shape(); s.moveTo(-0.0018, -len * 0.2); s.lineTo(0.0018, -len * 0.2); s.lineTo(0.0006, len); s.lineTo(-0.0006, len); s.closePath();
+      const n = new THREE.Mesh(new THREE.ShapeGeometry(s), glow(col, 2.4)); n.position.set(dx, BASE + dy, FZ + 0.004); G.add(n); return n;
+    };
+    if (name === 'combo') { needles.fuel = mk(dr * 0.82, 0xff5a1f); needles.temp = mk(dr * 0.6, 0xff5a1f); }
+    else needles[name] = mk(dr * 0.88, 0xff5a1f);
+    G.add(at(cyl(0.0068, 0.0078, 0.006, M.black, 20), dx, BASE + dy, FZ + 0.007, 0, PI / 2));
+  }
+  const deg = PI / 180;
+  G.userData.set = (kph, rpm, fuel, temp) => {
+    needles.speed.rotation.z = -(-135 + 270 * Math.min(kph, 180) / 180) * deg;
+    needles.tach.rotation.z = -(-135 + 270 * Math.min(rpm, 8000) / 8000) * deg;
+    needles.fuel.rotation.z = -(-50 + 100 * fuel) * deg;
+    needles.temp.rotation.z = -(230 - 100 * temp) * deg;
+  };
+  return G;
+}
+
+/** the wheel itself (it turns): a leather rim sewn along the inside, a padded hub, four spokes. Ring in XY, you on +Z. */
+function steeringWheel(M) {
+  const G = new THREE.Group(), R = WHEEL_R, tube = 0.017;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R, tube, 20, 160), M.wheel); rim.scale.z = 1.12; G.add(rim);
+  // cross-stitches either side of the seam, on the inner face of the rim, toward you
+  const n = 170, st = new THREE.InstancedMesh(new THREE.BoxGeometry(0.0042, 0.0011, 0.0009), M.stitch, n * 2), o = new THREE.Object3D();
+  const T = new THREE.Vector3(), Nn = new THREE.Vector3(), B = new THREE.Vector3(), Xd = new THREE.Vector3(), m4 = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) for (const s of [-1, 1]) {
+    const a = (i + 0.5) / n * PI * 2;
+    T.set(Math.cos(a), -Math.sin(a), 0); Nn.set(-Math.sin(a), -Math.cos(a), 1.12).normalize(); B.crossVectors(Nn, T);
+    o.position.set(Math.sin(a) * R, Math.cos(a) * R, 0).addScaledVector(Nn.clone().multiply(new THREE.Vector3(1, 1, 1.12)), tube * 1.02).addScaledVector(B, s * 0.0021);
+    Xd.copy(T).multiplyScalar(0.8).addScaledVector(B, -s * 0.6).normalize();
+    o.quaternion.setFromRotationMatrix(m4.makeBasis(Xd, Nn.clone().cross(Xd), Nn)); o.updateMatrix(); st.setMatrixAt(i * 2 + (s > 0 ? 1 : 0), o.matrix);
+  }
+  G.add(st);
+  // the padded hub, with a plain oval badge
+  const pad = new THREE.Mesh(new THREE.ExtrudeGeometry(roundRect(0.2, 0.14, 0.05), { depth: 0.02, curveSegments: 10, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.018, bevelOffset: -0.018, bevelSegments: 6 }), M.pad);
+  pad.position.set(0, -0.012, -0.078); G.add(pad);
+  const badge = cyl(0.015, 0.015, 0.003, M.chrome, 32); badge.scale.x = 1.45; G.add(at(badge, 0, -0.004, -0.0365, 0, PI / 2));
+  // four spokes, dished down from the rim to the hub
+  for (const s of [-1, 1]) {
+    G.add(strut(new THREE.Vector3(s * 0.094, -0.03, -0.056), new THREE.Vector3(s * 0.177, -0.034, -0.004), 0.05, 0.034, 0.016, M.pad));
+    G.add(strut(new THREE.Vector3(s * 0.05, -0.074, -0.056), new THREE.Vector3(s * 0.085, -0.159, -0.004), 0.04, 0.03, 0.015, M.pad));
+  }
+  return G;
+}
+
+/** what the wheel turns on (it doesn't turn): the boss, the shroud, the two stalks */
+function column(M) {
+  const G = new THREE.Group();
+  G.add(at(cyl(0.034, 0.04, 0.08, M.satin, 24), 0, -0.012, -0.12, 0, PI / 2));
+  const sh = new THREE.Mesh(new RoundedBoxGeometry(0.125, 0.11, 0.3, 4, 0.04), M.dash); sh.position.set(0, -0.035, -0.3); G.add(sh);
+  for (const s of [-1, 1]) {
+    // left: the indicator; right: the wipers, with a ribbed end you twist
+    const k = new THREE.Group(); k.position.set(s * 0.058, -0.01, -0.175); k.rotation.set(0, -s * 0.25, -s * 0.12); G.add(k);
+    k.add(at(cyl(0.0062, 0.0052, 0.13, M.black, 12), s * 0.065, 0, 0, 0, 0, -s * PI / 2));
+    const tip = s > 0 ? 0.0095 : 0.0078, tl = s > 0 ? 0.042 : 0.03;
+    k.add(at(cyl(tip, tip * 0.92, tl, M.black, 16), s * (0.13 + tl / 2), 0, 0, 0, 0, -s * PI / 2));
+    if (s > 0) for (const x of [0.14, 0.152, 0.164]) k.add(at(new THREE.Mesh(new THREE.TorusGeometry(tip, 0.0012, 6, 20), M.satin), x, 0, 0, PI / 2));
+  }
+  return G;
+}
+
+/** the trim over a windshield pillar: moulded, bowed toward you, narrower at the roof. side: +1 = the glass is on its +x edge */
+function aPillar(M, side) {
+  const L = 1.02, W = 0.13, T = 0.045;
+  let g = new RoundedBoxGeometry(W, L, T, 4, 0.018); const p = g.attributes.position, e = side * W / 2;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i) / L + 0.5;
+    if (p.getZ(i) > 0) p.setZ(i, p.getZ(i) + 0.018 * (1 - (2 * x / W) ** 2));
+    p.setX(i, e + (x - e) * (1 - 0.3 * y));
+  }
+  g = smooth(g);
+  const m = new THREE.Mesh(g, M.trim), edge = side > 0 ? GLASS.x - GLASS.w : GLASS.x + GLASS.w;
+  m.rotation.x = Math.atan2(UPG.z, UPG.y);
+  m.position.set(edge - side * (W / 2 - 0.022), GLASS.y, GLASS.z).addScaledVector(UPG, L * 0.43).addScaledVector(NG, 0.03);
+  return m;
+}
+
+/** a black band printed round the inside edge of the glass, fading out in dots */
+function fritBands(P) {
+  const T = canvasTex(64, 256, (c, w, h) => {
+    c.fillStyle = '#fff'; c.fillRect(0, 0, w, h * 0.5);
+    for (let y = h * 0.5 + 4; y < h; y += 8) { const r = 3.6 * (1 - (y - h * 0.5) / (h * 0.5)); for (let x = 4 + ((y / 8) % 2) * 4; x < w; x += 8) { c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); } }
+  }, { srgb: false });
+  const out = [];
+  for (const [len, x, y, rz] of [[GLASS.w * 2, 0, 0.04, PI], [GLASS.l, -GLASS.w + 0.04, GLASS.l / 2, PI / 2], [GLASS.l, GLASS.w - 0.04, GLASS.l / 2, -PI / 2]]) {
+    const t = T.clone(); t.wrapS = THREE.RepeatWrapping; t.repeat.set(len / 0.02, 1); t.needsUpdate = true;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.08), new THREE.MeshBasicMaterial({ color: 0x040404, alphaMap: t, transparent: true, depthWrite: false }));
+    m.position.set(x, y, 0.002); m.rotation.z = rz; P.add(m); out.push(m);
+  }
+  return out;
 }
 
 export default {
@@ -94,8 +294,8 @@ export default {
     S.background = new THREE.Color(0x9aa3aa);
     S.environment = await envFrom(engine.renderer, '/tex/kloofendal_overcast_puresky_1k.hdr');
     S.environmentIntensity = 0.25;
-    S.add(new THREE.HemisphereLight(0xc4ccd4, 0x2a2826, 0.6));
-    const key = new THREE.DirectionalLight(0xc8d2dc, 0.7); key.position.set(0.5, 3, -4); S.add(key);
+    S.add(new THREE.HemisphereLight(0xc4ccd4, 0x2a2826, 0.85));
+    const key = new THREE.DirectionalLight(0xc8d2dc, 1.0); key.position.set(0.5, 3, -4); S.add(key);
 
     // ---- the real street outside (swappable) ----
     this.views = {
@@ -108,53 +308,87 @@ export default {
 
     // ---- car interior ----
     const C = this.car = new THREE.Group(); C.position.x = SEAT_X; S.add(C);
-    const dashM = new THREE.MeshStandardMaterial({ color: 0x17181a, roughness: 0.75, normalMap: (await import('../engine/kit.js')).tex('/tex/leather_red_03_nor.jpg', { repeat: [4, 2], srgb: false }) });
-    dashM.normalScale.set(0.4, 0.4);
-    const trim = std(0x1f2124, { rough: 0.5 });
-    const fabric = std(0x2a2b2e, { rough: 0.95 });
-    // dashboard: a long rounded slab under the windshield
-    C.add(at(box(2.4, 0.22, 0.62, dashM, 0.08), -0.25, -0.43, -0.98));
-    C.add(at(box(2.4, 0.5, 0.3, dashM, 0.06), -0.25, -0.72, -0.78));
-    // windshield frame: A-pillars + header
-    for (const x of [-1.2, 0.72]) { const p = box(0.09, 1.1, 0.12, trim, 0.03); p.position.set(x, 0.1, -0.85); p.rotation.x = -0.62; C.add(p); }
-    C.add(at(box(2.3, 0.14, 0.5, fabric), -0.25, 0.47, -0.42));
-    // the hood out past the glass, shining wet: you're sitting in a car, not behind a pane
-    { const hg = new THREE.PlaneGeometry(2.0, 1.45, 24, 10), p = hg.attributes.position; for (let i = 0; i < p.count; i++) { const u = p.getX(i) / 1.0, v = p.getY(i) / 0.725; p.setZ(i, -u * u * 0.05 - (v + 1) * (v + 1) * 0.03); } hg.computeVertexNormals();
-      const hood = new THREE.Mesh(hg, new THREE.MeshStandardMaterial({ color: 0x8c949c, metalness: 0.55, roughness: 0.26, envMapIntensity: 1.4 })); hood.rotation.x = -PI / 2 + 0.05; hood.position.set(-0.25, -0.41, -1.72); C.add(hood); }
-    // glass (very faint, the pass does the rain)
-    // rear-view mirror
-    const mir = box(0.24, 0.07, 0.03, trim, 0.02); mir.position.set(-0.36, 0.31, -0.66); mir.rotation.y = 0.25; C.add(mir);
-    const mstem = cyl(0.01, 0.01, 0.12, trim); mstem.position.set(-0.36, 0.38, -0.66); C.add(mstem);
-    // center console with clock + fuel
+    const M = cabinMats();
+    C.add(dashboard(M));
+    const pod = cluster(M); pod.position.x = -0.74; C.add(pod); this.gauges = pod.userData.set;
+    this.kph = 0; this.rpm = 0; this.engineOn = true;
+    // steering: the column holds still, the wheel turns on it
+    const steer = new THREE.Group(); steer.position.set(-0.74, -0.234, -0.5); steer.rotation.x = -0.45; C.add(steer);
+    steer.add(column(M));
+    this.wheel = steeringWheel(M); steer.add(this.wheel);
+    // the pillars either side of the glass, the strip over it, the roof lining
+    C.add(aPillar(M, 1), aPillar(M, -1));
+    C.add(at(box(GLASS.w * 2 + 0.1, 0.07, 0.035, M.trim, 0.014), GLASS.x, GLASS.y + UPG.y * GLASS.l + 0.01, GLASS.z + UPG.z * GLASS.l + 0.025, 0, Math.atan2(UPG.z, UPG.y)));
+    C.add(at(box(2.1, 0.035, 1.3, M.headliner, 0.015), -0.24, 0.455, 0.08));
+    // sun visors folded up, and the mirror on its stalk
+    for (const [x, wd] of [[-0.74, 0.36], [0.26, 0.34]]) {
+      C.add(at(box(wd, 0.017, 0.16, std(0x6c6862, { rough: 0.95 }), 0.007), x, 0.427, -0.42, 0, 0.08));
+      C.add(at(cyl(0.005, 0.005, wd * 0.9, M.satin, 8), x, 0.43, -0.51, 0, 0, PI / 2));
+    }
+    { const mg = new THREE.Group(); mg.position.set(-0.24, 0.33, -0.47); mg.rotation.set(0.15, -0.35, 0); C.add(mg);
+      const hs = new RoundedBoxGeometry(0.24, 0.07, 0.035, 4, 0.016), hp = hs.attributes.position;
+      for (let i = 0; i < hp.count; i++) { const u = Math.abs(hp.getX(i)) / 0.12; hp.setY(i, hp.getY(i) * (1 - 0.25 * u * u)); }
+      mg.add(new THREE.Mesh(hs, M.black), at(new THREE.Mesh(new THREE.PlaneGeometry(0.226, 0.054), M.mirror), 0, 0, 0.0181));
+      C.add(strut(new THREE.Vector3(-0.24, 0.335, -0.49), new THREE.Vector3(-0.24, 0.385, -0.565), 0.016, 0.022, 0.012, M.black)); }
+    // the hood out past the glass, wet paint with a crease down each side and a rise in the middle
+    { const hg = new THREE.PlaneGeometry(2.0, 1.45, 72, 24), p = hg.attributes.position;
+      for (let i = 0; i < p.count; i++) { const u = p.getX(i), v = p.getY(i) / 0.725;
+        p.setZ(i, -u * u * 0.05 - (v + 1) * (v + 1) * 0.03 + 0.013 * Math.exp(-((u / 0.24) ** 2)) + 0.006 * Math.exp(-(((Math.abs(u) - 0.46) / 0.026) ** 2))); }
+      hg.computeVertexNormals();
+      const hood = this.hood = new THREE.Mesh(hg, M.paint); hood.rotation.x = -PI / 2 + 0.05; hood.position.set(-0.25, -0.41, -1.72); C.add(hood); }
+    // center console with clock
     this.clockTex = canvasTex(256, 96, (c) => { c.fillStyle = '#06080a'; c.fillRect(0, 0, 256, 96); });
     const clock = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.06), new THREE.MeshBasicMaterial({ map: this.clockTex }));
-    clock.position.set(-0.28, -0.38, -0.665); clock.rotation.x = -0.35; C.add(clock); this.clock = clock;
-    // fuel gauge (driver cluster, seen when we look left)
-    const gauge = new THREE.Group(); gauge.position.set(-0.75, -0.3, -0.72); gauge.rotation.x = -0.2; C.add(gauge);
-    gauge.add(new THREE.Mesh(new THREE.CircleGeometry(0.06, 32), new THREE.MeshBasicMaterial({ color: 0x0a0c0e })));
-    const needle = this.needle = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.05), glow(0xff7a30, 2.5)); needle.geometry.translate(0, 0.025, 0); needle.position.z = 0.001; gauge.add(needle);
-    for (let i = 0; i <= 4; i++) { const tk = new THREE.Mesh(new THREE.PlaneGeometry(0.003, 0.012), glow(0xffffff, 1.2)); const a = -1.1 + i * 0.55; tk.position.set(Math.sin(a) * 0.05, Math.cos(a) * 0.05, 0.001); tk.rotation.z = -a; gauge.add(tk); }
-    needle.rotation.z = 0.35;
-    // steering wheel
-    const wheel = this.wheel = wheelModel(trim, std(0x141517, { rough: 0.45 })); wheel.position.set(-0.74, -0.24, -0.5); wheel.rotation.x = -0.45; C.add(wheel);
+    clock.position.set(-0.24, -0.47, -0.6); C.add(clock); this.clock = clock;
     // driver seat back + headrest
-    C.add(at(box(0.5, 0.75, 0.12, fabric, 0.05), -0.74, -0.35, 0.22));
-    C.add(at(box(0.26, 0.2, 0.1, fabric, 0.05), -0.74, 0.18, 0.24));
-    // passenger door, hinged at its front edge; everything on it swings out together
+    C.add(at(box(0.5, 0.75, 0.12, M.cloth, 0.05), -0.74, -0.35, 0.22));
+    C.add(at(box(0.26, 0.2, 0.1, M.cloth, 0.05), -0.74, 0.18, 0.24));
+
+    // ---- your door, hinged at its front edge; everything on it swings out together. Local -x is the cabin side ----
     const door = this.door = new THREE.Group(); door.position.set(-1.24, 0, -0.78); door.scale.x = -1; C.add(door);
-    const panelM = std(0x55585e, { rough: 0.62 }), softM = std(0x74777d, { rough: 0.85 });
-    door.add(at(box(0.07, 0.72, 1.24, panelM, 0.02), 0.02, -0.6, 0.62));
-    door.add(at(box(0.09, 0.05, 0.52, softM, 0.018), -0.02, -0.36, 0.72));                 // armrest
-    door.add(at(box(0.05, 0.3, 0.72, softM, 0.02), -0.02, -0.56, 0.7));                    // cloth insert
-    this.doorHandle = box(0.018, 0.05, 0.13, std(0xa3a9ae, { rough: 0.25, metal: 0.9 }), 0.006); this.doorHandle.position.set(-0.03, -0.28, 0.3); door.add(this.doorHandle);
-    door.add(at(box(0.05, 0.03, 1.18, trim), 0.02, 0.43, 0.6), at(box(0.05, 0.68, 0.05, trim), 0.02, 0.09, 1.2), at(box(0.05, 0.68, 0.06, trim), 0.02, 0.09, 0.02));
-    door.add(at(box(0.06, 0.05, 1.2, trim, 0.01), 0.02, -0.235, 0.6));
+    door.add(at(box(0.07, 0.74, 1.24, M.door, 0.02), 0.022, -0.6, 0.62));                        // the card
+    door.add(at(box(0.06, 0.055, 1.18, M.dash, 0.02), -0.004, -0.255, 0.64));                    // the sill along the glass
+    door.add(at(box(0.024, 0.1, 0.7, M.cloth, 0.01), -0.014, -0.34, 0.8));                        // cloth band between the armrest and the sill
+    door.add(at(box(0.035, 0.12, 0.62, M.door, 0.012), -0.025, -0.86, 0.82), at(box(0.02, 0.006, 0.58, M.black), -0.03, -0.8, 0.82));   // map pocket
+    door.add(at(box(0.014, 0.07, 1.2, M.carpet, 0.005), -0.017, -0.935, 0.62));                 // carpet strip at the foot
+    { const s = new THREE.Shape(); s.moveTo(-0.012, -0.53); s.bezierCurveTo(-0.05, -0.51, -0.085, -0.475, -0.092, -0.443); s.bezierCurveTo(-0.096, -0.42, -0.09, -0.405, -0.07, -0.403); s.lineTo(-0.012, -0.41); s.closePath();
+      const ar = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.58, curveSegments: 10, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.012, bevelOffset: -0.012, bevelSegments: 5 }), M.door);
+      ar.position.z = 0.5; door.add(ar);                                                         // armrest
+      door.add(at(box(0.042, 0.006, 0.11, M.black, 0.003), -0.054, -0.401, 0.6)); }               // the cup you pull it shut by
+    // the handle: a chrome lever in a black recess, pivoting at its front end
+    door.add(at(box(0.008, 0.052, 0.17, M.black, 0.004), -0.014, -0.31, 0.335));
+    const lever = this.doorLever = new THREE.Group(); lever.position.set(-0.027, -0.31, 0.262); door.add(lever);
+    lever.add(at(box(0.012, 0.02, 0.13, M.chrome, 0.005), 0, 0, 0.062));
+    // lock knob through the sill, window crank, speaker
+    door.add(at(cyl(0.0058, 0.0064, 0.034, M.satin, 12), -0.012, -0.214, 1.08), at(new THREE.Mesh(new THREE.SphereGeometry(0.0062, 12, 8), M.satin), -0.012, -0.197, 1.08));
+    door.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.009, 0.002, 6, 20), M.chrome), -0.012, -0.229, 1.08, 0, PI / 2));
+    { const k = new THREE.Group(); k.position.set(-0.03, -0.62, 0.78); k.rotation.x = 0.75; door.add(k);
+      k.add(at(cyl(0.022, 0.024, 0.014, M.satin, 24), 0, 0, 0, 0, 0, PI / 2), at(box(0.008, 0.1, 0.017, M.chrome, 0.004), -0.01, -0.046, 0), at(cyl(0.011, 0.011, 0.034, M.black, 16), -0.03, -0.09, 0, 0, 0, PI / 2)); }
+    { const gt = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#2b2d31'; c.fillRect(0, 0, w, h); c.fillStyle = '#0a0a0b'; for (let y = 6, r = 0; y < h; y += 10, r++) for (let x = 6 + (r % 2) * 5; x < w; x += 10) if (Math.hypot(x - 128, y - 128) < 118) { c.beginPath(); c.arc(x, y, 3, 0, 7); c.fill(); } });
+      const sp = new THREE.Group(); sp.position.set(-0.016, -0.79, 0.3); sp.rotation.y = -PI / 2; door.add(sp);
+      sp.add(new THREE.Mesh(new THREE.CircleGeometry(0.072, 40), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.75 })), new THREE.Mesh(new THREE.TorusGeometry(0.074, 0.006, 8, 48), M.satin)); }
+    // the window frame: its front edge leans back along the pillar
+    const wf = (a, b, t = 0.04) => door.add(strut(new THREE.Vector3(...a), new THREE.Vector3(...b), t, t, 0.03, M.satin));
+    wf([0.02, 0.43, 0.32], [0.02, 0.43, 1.22]); wf([0.02, -0.23, 1.21], [0.02, 0.44, 1.21]); wf([0.02, -0.23, 0.06], [0.02, 0.44, 0.33]);
+    // the mirror's sail in the front corner, and the mirror itself outside it
+    { const s = new THREE.Shape([new THREE.Vector2(0, -0.235), new THREE.Vector2(0.17, -0.235), new THREE.Vector2(0.06, 0.05), new THREE.Vector2(0, 0.05)]);
+      const sail = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelOffset: -0.006, bevelSegments: 2 }), M.black);
+      sail.rotation.y = -PI / 2; sail.position.x = 0.01; door.add(sail);
+      door.add(at(cyl(0.007, 0.009, 0.02, M.satin, 12), -0.026, -0.17, 0.06, 0, 0, PI / 2));
+      const mh = new RoundedBoxGeometry(0.075, 0.11, 0.18, 5, 0.035), mp = mh.attributes.position;
+      for (let i = 0; i < mp.count; i++) { const f = 1 - 0.45 * Math.max(0, -mp.getZ(i) / 0.09); mp.setX(i, mp.getX(i) * f); mp.setY(i, mp.getY(i) * (0.55 + 0.45 * f)); }
+      const mirror = new THREE.Group(); mirror.position.set(0.11, -0.16, 0.06); door.add(mirror);
+      mirror.add(new THREE.Mesh(mh, M.paint), at(new THREE.Mesh(new THREE.PlaneGeometry(0.066, 0.094), M.mirror), 0, 0, 0.091)); }
     // side glass with rain on it (a drawn texture, the windshield pass only covers the front)
     const dropsT = dropsTexture();
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.64), new THREE.MeshBasicMaterial({ map: dropsT, transparent: true, depthWrite: false, opacity: 0.85, side: THREE.DoubleSide }));
-    pane.position.set(0.02, 0.1, 0.62); pane.rotation.y = -PI / 2; door.add(pane);
-    // pillar behind the door, roof edge
-    C.add(at(box(0.09, 1.0, 0.1, trim), -1.26, -0.02, 0.5), at(box(0.1, 0.1, 1.5, fabric), -1.32, 0.46, -0.2));
+    { const s = new THREE.Shape([new THREE.Vector2(0.07, -0.235), new THREE.Vector2(1.2, -0.235), new THREE.Vector2(1.2, 0.42), new THREE.Vector2(0.32, 0.42)]);
+      const pg = new THREE.ShapeGeometry(s), uv = pg.attributes.uv, pp = pg.attributes.position;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - (pp.getX(i) - 0.07) / 1.13, (pp.getY(i) + 0.235) / 0.655);
+      const pane = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ map: dropsT, transparent: true, depthWrite: false, opacity: 0.85, side: THREE.DoubleSide }));
+      pane.rotation.y = -PI / 2; pane.position.x = 0.02; door.add(pane); }
+    // pillar behind the door with your seatbelt up it, roof edge
+    C.add(at(box(0.1, 1.0, 0.1, M.trim, 0.03), -1.27, -0.02, 0.5), at(box(0.1, 0.1, 1.5, M.headliner, 0.03), -1.32, 0.46, -0.2));
+    C.add(at(box(0.005, 0.76, 0.046, std(0x1d1f22, { rough: 0.8 })), -1.217, -0.12, 0.47), at(box(0.014, 0.03, 0.062, M.satin, 0.006), -1.214, 0.27, 0.47));
     // what is out that side: the wet side of the street, only ever seen soft through glass and rain
     const sideM = new THREE.MeshBasicMaterial({ map: canvasTex(1024, 512, (c, w, h) => {
       const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#d7e1ea'); g.addColorStop(0.46, '#c3cfd9'); g.addColorStop(0.47, '#5f6a70'); g.addColorStop(0.62, '#4b5358'); g.addColorStop(0.63, '#646b6e'); g.addColorStop(1, '#3b4145'); c.fillStyle = g; c.fillRect(0, 0, w, h);
@@ -182,6 +416,10 @@ export default {
       this.bladeAng = [PARK, PARK]; this.wipersOn = false;
       u.uR1.value.set(ARM[0] - BLADE[0] / 2, ARM[0] + BLADE[0] / 2); u.uR2.value.set(ARM[1] - BLADE[1] / 2, ARM[1] + BLADE[1] / 2);
       u.uMid.value = MID; u.uAmp.value = AMP; u.uP1.value.set(...PIVOT[0]); u.uP2.value.set(...PIVOT[1]); }
+    // the cabin is in front of the glass: tell the rain pass where, so no drops land on the wheel or your arms
+    const frit = fritBands(this.pane);
+    for (const o of [C, this.armL, this.armR, ...frit]) o.traverse(n => n.layers.enable(1));
+    this.hood.layers.disable(1);
   },
 
   setClock(text) {
@@ -201,6 +439,8 @@ export default {
     engine.rig.shake = 0.35; engine.rig.jolt = 0.25;
     engine.rig.set({ pos: [0, 0, 0], look: [0.04, -0.07, -2], fov: 42 });
     this.show('street');
+    this.glass.inside = { scene: this.scene, camera: engine.camera, layer: 1 };
+    this.engineOn = true;
     prewarm(engine);
     audio.rain(0.5, 0.8); audio.roof(0.3); audio.carEngine(0.8, 0.5); audio.scape('kotse');
   },
@@ -218,13 +458,18 @@ export default {
       this.wipers[i].rotation.z = -this.bladeAng[i];
     }
     u.uA1.value = this.bladeAng[0]; u.uA2.value = this.bladeAng[1];
-    // hands on the wheel while you're driving, the wheel moving a little under them
+    // the gauges: slow through the village, the engine ticking over
+    this.kph += ((this.engineOn ? this.drive * 38 : 0) - this.kph) * (1 - Math.exp(-1.2 * dt));
+    this.rpm += ((this.engineOn ? 780 + this.kph * 62 + Math.sin(t * 7) * 15 : 0) - this.rpm) * (1 - Math.exp(-2.5 * dt));
+    this.gauges(this.kph, this.rpm, 0.34, 0.48);
+    // hands closed round the rim while you're driving, the wheel moving a little under them
     if (this.onWheel) {
       this.wheel.rotation.z = Math.sin(t * 0.7) * 0.05 + Math.sin(t * 1.9) * 0.012;
-      const c = this.car;
-      for (const [arm, a, e] of [[this.armL, -1.2, [-0.34, -0.62, 0.1]], [this.armR, 1.2, [0.34, -0.62, 0.1]]]) {
-        _w.set(Math.sin(a) * 0.19, Math.cos(a) * 0.19, 0.022).applyEuler(this.wheel.rotation).add(this.wheel.position); c.localToWorld(_w);
-        _e.set(...e); arm.reach(_w.clone().add(_u.set(-e[0] * 0.05, -0.02, 0.06)), _e, a > 0 ? 0.6 : -0.6);
+      this.wheel.updateWorldMatrix(true, false);
+      for (const [arm, a, e] of [[this.armL, -1.15, [-0.3, -0.6, 0.06]], [this.armR, 1.15, [0.3, -0.6, 0.06]]]) {
+        _w.set(Math.sin(a) * WHEEL_R, Math.cos(a) * WHEEL_R, 0); this.wheel.localToWorld(_w);
+        _u.set(Math.cos(a), -Math.sin(a), 0).multiplyScalar(-Math.sign(a)).transformDirection(this.wheel.matrixWorld);   // along the rim, toward the top
+        arm.grip(_w, _u, _e.set(...e));
       }
     }
   },
@@ -265,25 +510,26 @@ export default {
       await D.say('', 'Nandoon pa rin ang tubig. Bumaba ka na rin.', { hold: 3 });
     }
     // the door: you turn to it, pull the handle, it swings out, rain and daylight come in
-    audio.layer('carEngine', 0, null, 1.2);
+    audio.layer('carEngine', 0, null, 1.2); this.engineOn = false;
     const u = this.engine.final.uniforms, arm = this.armL;
     this.onWheel = false; this.armR.visible = false;
     this.sideWorld.visible = true;
     await rig.move({ pos: [-0.07, -0.03, -0.02], look: [-1.0, -0.3, -0.34], dur: 2.0, fov: 52, e: 'inOut' });
     await D.wait(0.2);
-    const w = new THREE.Vector3(), el = new THREE.Vector3(), reach = rest => {
-      w.set(-0.03, -0.27, 0.3); this.door.localToWorld(w);
-      el.set(-0.1, -0.62, 0.06).applyQuaternion(this.engine.camera.quaternion).add(this.engine.camera.position);
-      if (rest) w.lerp(el.clone().add(new THREE.Vector3(-0.05, -0.4, 0.05)), rest);
-      arm.reach(w, el, -1.2);
-    };
+    const w = new THREE.Vector3(), ax = new THREE.Vector3(), el = new THREE.Vector3(), eye = this.engine.camera;
+    const elbow = () => el.set(-0.1, -0.62, 0.06).applyQuaternion(eye.quaternion).add(eye.position);
+    // fingers round the lever, thumb forward: its free end, and the way it runs
+    const hold = () => { this.doorLever.updateWorldMatrix(true, false); w.set(0, 0, 0.095); this.doorLever.localToWorld(w); ax.set(0, 0, -1).transformDirection(this.doorLever.matrixWorld); arm.grip(w, ax, elbow()); };
+    hold(); const wrist = arm.position.clone();
+    const reach = rest => { elbow(); const p = wrist.clone(); if (rest) p.lerp(el.clone().add(new THREE.Vector3(-0.05, -0.4, 0.05)), rest); arm.reach(p, el, -1.2); };
     reach(1); arm.visible = true;
     await animate(k => reach(1 - k), 0.75, 'inOut');
+    hold();
     audio.tone(1200, 0.03, { vol: 0.08 }); audio.noiseHit(0.05, { f: 2400, vol: 0.14 }); audio.tone(240, 0.08, { vol: 0.2, to: 150, delay: 0.05 });
-    await animate(k => { this.door.rotation.y = -0.05 * k; reach(); }, 0.16, 'out');
+    await animate(k => { this.doorLever.rotation.y = -0.42 * k; this.door.rotation.y = -0.05 * k; hold(); }, 0.16, 'out');
     audio.rain(1.2, 0.0); audio.layer('roof', 0, null, 0.4);
     await D.wait(0.18);
-    animate(k => { this.door.rotation.y = -0.05 - 0.72 * k; this.dayLight.intensity = 2.2 + 14 * k; reach(); }, 1.4, 'out');
+    animate(k => { this.door.rotation.y = -0.05 - 0.72 * k; this.dayLight.intensity = 2.2 + 14 * k; hold(); }, 1.4, 'out');
     await animate(k => { const w = k * k * k; u.uLift.value.set(this.grade.lift[0] + (1 - this.grade.lift[0]) * w, this.grade.lift[1] + (1 - this.grade.lift[1]) * w, this.grade.lift[2] + (1 - this.grade.lift[2]) * w); }, 1.5, 'linear');
     arm.visible = false;
   },

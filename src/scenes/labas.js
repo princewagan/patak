@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, box, cyl, at, blob, canvasTex, envFrom, tex, rand } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
-import { handGeometry } from '../engine/body.js';
+import { handGeometry, gripGeometry, GRIP } from '../engine/body.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { animate, walkPath } from '../engine/tween.js';
@@ -391,13 +391,34 @@ export function povArm({ left = false } = {}) {
   const pts = []; for (let i = 0; i <= 14; i++) { const t = i / 14; pts.push(new THREE.Vector2(0.024 + 0.024 * Math.sin(Math.min(1, t * 1.5) * PI / 2) + (t > 0.7 ? (t - 0.7) * 0.03 : 0), t * 0.62)); }
   const lm = new THREE.Mesh(new THREE.LatheGeometry(pts, 20), skin); lm.scale.z = 0.8; lm.castShadow = true; fore.add(lm);
   const hand = new THREE.Mesh(left ? handGeometry().L : handGeometry().R, skin); hand.scale.setScalar(1.08); hand.castShadow = true; G.add(hand);
+  const fist = new THREE.Mesh(left ? gripGeometry().L : gripGeometry().R, skin); fist.scale.setScalar(1.08); fist.castShadow = true; fist.visible = false; G.add(fist);
   G.visible = false;
   const _d = new THREE.Vector3(), _q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
+  const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _a = new THREE.Vector3(), _m = new THREE.Matrix4();
   G.reach = (wrist, elbow, roll = 0) => {
     G.position.copy(wrist); _d.copy(elbow).sub(wrist).normalize();
     fore.quaternion.setFromUnitVectors(UP, _d).multiply(_q.setFromAxisAngle(UP, roll)); hand.quaternion.copy(fore.quaternion);
+    hand.visible = true; fist.visible = false;
   };
   G.press = (wrist, elbow, handQ) => { G.reach(wrist, elbow); hand.quaternion.copy(handQ); };
+  /** close the hand round a bar: `centre` is a point on the bar, `axis` runs along it toward the thumb, the forearm goes back to `elbow`.
+      The bar lies slanted across the palm (GRIP.tilt), so the wrist only has to bend a little whatever angle the bar comes in at. */
+  G.grip = (centre, axis, elbow) => {
+    const s = fist.scale.x, gx = (left ? GRIP.x : -GRIP.x) * s, gy = GRIP.y * s, sn = Math.sin(GRIP.tilt), cs = Math.cos(GRIP.tilt);
+    _a.copy(axis).normalize(); G.position.copy(centre);
+    for (let k = 0; k < 3; k++) {
+      _d.copy(elbow).sub(G.position).normalize();
+      _y.copy(_d).addScaledVector(_a, -_d.dot(_a)).normalize().multiplyScalar(cs).addScaledVector(_a, -sn);   // the hand's own up: toward the elbow, slanted against the bar
+      _z.copy(_a).addScaledVector(_y, sn).divideScalar(cs);                                                    // the knuckle line, thumb side
+      _x.crossVectors(_y, _z);
+      G.position.copy(centre).addScaledVector(_x, -gx).addScaledVector(_y, -gy);
+    }
+    fist.quaternion.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
+    // the forearm flattens the same way the wrist does
+    _d.copy(elbow).sub(G.position).normalize(); _z.addScaledVector(_d, -_z.dot(_d)).normalize(); _x.crossVectors(_d, _z);
+    fore.quaternion.setFromRotationMatrix(_m.makeBasis(_x, _d, _z));
+    hand.visible = false; fist.visible = true;
+  };
   return G;
 }
 
@@ -550,7 +571,9 @@ export default {
   enter(engine) {
     this.engine = engine;
     engine.rig.shake = 0.45; engine.rig.jolt = 0;
-    engine.rig.set({ pos: this.A, fov: 44, roll: 0 });
+    // already facing the door: the look must not carry over from the car
+    const cp = Math.cos(this.A_PITCH), A = this.A;
+    engine.rig.set({ pos: A, look: [A[0] + Math.sin(this.A_YAW) * cp * 8, A[1] + Math.sin(this.A_PITCH) * 8, A[2] - Math.cos(this.A_YAW) * cp * 8], fov: 44, roll: 0 });
     engine.final.uniforms.uLift.value.set(1, 1, 1);   // we come out of the whiteout of the car door
     this.carDoor.rotation.y = this.AJAR;
     prewarm(engine);
@@ -651,28 +674,34 @@ export default {
     await rig.move({ look: [1.5, -0.55, -1.7], dur: 1.6, fov: 38 });
     await D.say('', 'Kakausapin mo ba sila?', { hold: 2.6 });
 
-    // ---- you go up to her ----
-    const from = rig.pos.clone(), to = new THREE.Vector3(0.82, roadY(-0.95) + 1.46, -0.95);
-    this.camPath = new THREE.CatmullRomCurve3([from, from.clone().lerp(to, 0.5).add(new THREE.Vector3(0.1, 0, 0.1)), to]);
-    this.view = { yaw: Math.atan2(1.55 - from.x, -(-1.7 - from.z)), pitch: -0.08 }; this._cp = null; this.stride = 1;
-    const walk2 = animate(k => { this.camK = k; this.view.yaw = Math.atan2(1.55 - rig.pos.x, rig.pos.z + 1.7); }, 3.2, 'sine').then(() => { this.stride = 0; });
-    await D.wait(1.4);
-    P.ate.look(E.camera, 0.9);
-    await animate(k => { P.ate.root.rotation.y = PI + 0.32 - 0.62 * k; }, 1.4, 'inOut');
+    // ---- you go up to her, but not too close: she stands on the right, the flooded street behind her on the left ----
+    const from = rig.pos.clone(), to = new THREE.Vector3(0.15, roadY(0.45) + 1.46, 0.45), TALK = new THREE.Vector3(1.05, -0.8, -3.0);
+    const d = TALK.clone().sub(to), y1 = Math.atan2(d.x, -d.z), p1 = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    this.camPath = new THREE.CatmullRomCurve3([from, from.clone().lerp(to, 0.5).add(new THREE.Vector3(0.06, 0, 0.04)), to]);
+    const y0 = Math.atan2(1.55 - from.x, from.z + 1.7), p0 = -0.1;
+    this.view = { yaw: y0, pitch: p0 }; this._cp = null; this.stride = 1;
+    // the shot settles while you walk and then holds still for the whole talk
+    const walk2 = animate(k => { this.camK = k; this.view.yaw = y0 + (y1 - y0) * k; this.view.pitch = p0 + (p1 - p0) * k; rig.fov = 38 + 4 * k; }, 2.4, 'sine')
+      .then(() => { this.stride = 0; });
+    await D.wait(0.8);
+    // until now she watches the water. As you come up she turns a little to you, not all the way: you see her face as she talks, and the water past her
+    P.ate.look(E.camera, 0.6);
+    await animate(k => { P.ate.root.rotation.y = PI + 0.32 + 1.25 * k; }, 1.4, 'inOut');
     await walk2;
     this.view = null; this.camPath = null;
-    rig.move({ look: [1.5, -0.42, -1.62], dur: 1.2, fov: 38 });
     await D.wait(0.6);
-    await D.ask(['Lagi po bang bumabaha rito?', 'Bakit po walang madaanan palabas?'], async i => {
+    const QUESTIONS = ['Lagi po bang bumabaha rito?', 'Bakit po walang madaanan palabas?'];
+    await D.ask(QUESTIONS, async i => {
+      await D.say('Ikaw', QUESTIONS[i]);
       P.ate.talking = true;
       if (i === 0) {
         P.ate.anim = (t, p) => { p.neck.rotation.y += Math.sin(t * 4.2) * 0.08; };
-        await D.say('', 'Madalas daw. Pero ito na raw ang pinakamalala.');
+        await D.say('Ate', "Madalas. Pero ito na 'yung pinakamalala.");
         P.ate.anim = null;
       } else {
         P.ate.look(this.jeep, 0.6);
-        await D.say('', 'Mataas daw ang gitna ng village. Lahat ng labasan, pababa.');
-        P.ate.look(E.camera, 0.9);
+        await D.say('Ate', "Mataas kasi 'yung gitna ng village. Lahat ng labasan, pababa.");
+        P.ate.look(E.camera, 0.6);
       }
       P.ate.talking = false;
     });

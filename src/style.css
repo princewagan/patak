@@ -33,7 +33,7 @@ button.chip:not(:disabled):hover, button.chip:focus-visible, .chip.hl, .chip.pic
 body.nobars .bar.top { transform: translateY(-100%); }
 body.nobars .bar.bottom { transform: translateY(100%); }
 
-#fader { position: absolute; inset: 0; background: #000; opacity: 1; transition: opacity 1.2s ease; z-index: 6; }
+#fader { position: absolute; inset: 0; background: #000; opacity: 1; z-index: 6; } /* opacity is set every frame by Director.black */
 
 /* who you are */
 #charcard { position: absolute; left: 7vw; top: 50%; transform: translateY(-50%); z-index: 7; opacity: 0; transition: opacity .8s; width: calc(var(--u) * 46); }

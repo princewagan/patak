@@ -62,7 +62,7 @@ Electric fan. You count your coins (the amount reflects your choices). Rain star
 
 ## PART TWO: SA TOTOO LANG (in reality) · Miyerkules, 6:41 AM
 A fast montage, **the same no matter what Sir chose**:
-1. Same jeep, same stop. The boy climbs in again and puts an envelope on your lap. **He doesn't recognize you.** At the corner, two more kids board the jeep behind.
+1. Same jeep, same stop. The boy climbs in again and puts an envelope on your lap. **He doesn't recognize you.** Out the open back, across the road, a busy jeepney stop at night (crowd, waiting shed, sari-sari store, fishball cart, a barker calling Cubao): other kids with the same envelopes and rag climb into the other jeeps.
 2. The fast food. The memo is still on the wall: *"ANG KULANG SA KAHA AY IKAKALTAS SA SAHOD."* Ate Weng is still contractual.
 3. The sari-sari price board: BIGAS ₱58 → ₱60. Lola Ising is in line again with her coin purse.
 

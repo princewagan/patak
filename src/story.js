@@ -21,7 +21,7 @@ export async function preload(engine) {
   engine.onUpdate(dt => tickTweens(dt));
   await Promise.all(['500 40px "Cormorant Garamond"', 'italic 500 40px "Cormorant Garamond"', '500 40px Barlow', '600 40px Barlow', '500 40px "Barlow Condensed"', '600 40px "Barlow Condensed"', '700 40px "Barlow Condensed"']
     .map(f => document.fonts.load(f).catch(() => null)));
-  if (!new URLSearchParams(location.search).has('noreal')) await preloadReal(['mark', 'joy', 'weng', 'driver', 'boy', 'tindera', 'commuter', 'lola', 'prince', 'keira', 'nanay', 'anak', 'tatay', 'kuya', 'panganay']);
+  if (!new URLSearchParams(location.search).has('noreal')) await preloadReal(['mark', 'joy', 'weng', 'driver', 'boy', 'tindera', 'commuter', 'lola', 'prince', 'keira', 'nanay', 'anak', 'tatay', 'kuya', 'panganay', 'apo1', 'apo2', 'apo3']);
   for (const name of ORDER) {
     const f = files[`./scenes/${name}.js`];
     if (!f) continue;

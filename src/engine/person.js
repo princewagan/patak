@@ -24,6 +24,7 @@ const SKIN = { light: 0xc08a64, tan: 0xa5714c, brown: 0x8a5a3a, dark: 0x6e4429 }
 const SIT_K = 0.79;   // pose "y" values were written for the old, longer legs
 const IDENTITY = new THREE.Matrix4();
 const TAU = Math.PI * 2;
+const _hq = [0, 1, 2, 3].map(() => new THREE.Quaternion()), _Y = new THREE.Vector3(0, 1, 0);
 const _ikT = new THREE.Vector3(), _ikD = new THREE.Vector3(), _ikN = new THREE.Vector3(), _ikW = new THREE.Vector3(), _ikE = new THREE.Vector3(), _ikP = new THREE.Vector3(), _ikC = new THREE.Vector3(), _ikM = new THREE.Matrix4(), _ikQ = new THREE.Quaternion(), _ikR = new THREE.Quaternion();
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -244,12 +245,13 @@ export class Person {
    * Bring a hand to a point in the world and keep it there: reach('R', target) with a Vector3 or Object3D (or a function
    * returning one, read every frame), reach('R', null) to let go. The arm is solved each frame, so the hand really arrives,
    * whatever the body is doing. The weight eases in and out, so it never snaps. o: { rate, w, wrist: [x,y,z] degrees,
-   * pole: [x,y,z] where the elbow should point, in the person's own space }
+   * pole: [x,y,z] where the elbow should point, in the person's own space,
+   * settle: how far in metres the scanned arm may shift its aim to land the visible hand, default 0.14 }
    */
   reach(side, target, o = {}) {
     const ik = this.ik ??= {}, a = ik[side] ??= { w: 0, goal: 0, off: new THREE.Vector3(), target: null };
     if (target == null) { a.goal = 0; a.rate = o.rate ?? 6; return this; }
-    a.target = target; a.goal = o.w ?? 1; a.rate = o.rate ?? 6; a.wrist = o.wrist ?? null; a.pole = o.pole ?? null; a.twist = o.twist ?? 0;
+    a.target = target; a.goal = o.w ?? 1; a.rate = o.rate ?? 6; a.wrist = o.wrist ?? null; a.pole = o.pole ?? null; a.twist = o.twist ?? 0; a.settle = o.settle ?? 0.14;
     return this;
   }
 
@@ -286,6 +288,43 @@ export class Person {
     }
   }
 
+  /** close a hand round what it holds: 'rest' | 'fist' | 'hold' | 'pinch' | 'open' (the scanned bodies have fingers; the puppet doesn't) */
+  grip(side, kind) { this.real?.grip(side, kind); return this; }
+
+  /**
+   * Turn a hand so that a thing it holds (a child of arm[side].wr) faces a given way in the world: aim('R', spoon, () => q).
+   * q is the world quaternion the thing should have. The wrist bends only as far as a wrist bends, and the roll about the
+   * forearm goes to the forearm, the way a real arm turns a spoon over. aim(side, null) lets go. o: { rate, w, bend, roll } (radians)
+   */
+  aim(side, prop, q, o = {}) {
+    const h = this.aims ??= {}, a = h[side] ??= { w: 0, goal: 0 };
+    if (!prop) { a.goal = 0; a.rate = o.rate ?? 6; return this; }
+    Object.assign(a, { prop, q, goal: o.w ?? 1, rate: o.rate ?? 6, bend: o.bend ?? 1.25, roll: o.roll ?? 1.6 });
+    return this;
+  }
+
+  aimHands(dt) {
+    for (const side of ['L', 'R']) {
+      const a = this.aims[side]; if (!a || !a.prop) continue;
+      a.w += (a.goal - a.w) * (1 - Math.exp(-a.rate * dt));
+      if (a.goal === 0 && a.w < 0.003) { a.prop = null; a.w = 0; continue; }
+      const arm = this.arm[side], [want, fq, loc, tw] = _hq;
+      want.copy(typeof a.q === 'function' ? a.q() : a.q).multiply(tw.copy(a.prop.quaternion).invert());   // where the hand has to face
+      arm.el.updateWorldMatrix(true, false); arm.el.getWorldQuaternion(fq);
+      loc.copy(fq).invert().multiply(want);
+      // the forearm rolls first
+      let th = 2 * Math.atan2(loc.y, loc.w); if (th > Math.PI) th -= 2 * Math.PI; if (th < -Math.PI) th += 2 * Math.PI;
+      th = clamp(th, -a.roll, a.roll) * a.w;
+      arm.el.quaternion.multiply(tw.setFromAxisAngle(_Y, th));
+      fq.multiply(tw); loc.copy(fq).invert().multiply(want);
+      // then the wrist, no further than it goes
+      if (loc.w < 0) loc.set(-loc.x, -loc.y, -loc.z, -loc.w);
+      const ang = 2 * Math.acos(Math.min(1, loc.w));
+      if (ang > a.bend) loc.slerpQuaternions(tw.identity(), loc.clone(), a.bend / ang);
+      arm.wr.quaternion.slerp(loc, a.w);
+    }
+  }
+
   /** the scanned arm is not quite the puppet's length: nudge the aim by what's left over, so the visible hand lands on the spot */
   settleArms() {
     for (const side of ['L', 'R']) {
@@ -296,7 +335,7 @@ export class Person {
       _ikQ.setFromRotationMatrix(_ikM.extractRotation(sp.matrixWorld)).invert();
       err.applyQuaternion(_ikQ);
       a.off.addScaledVector(err, 0.3);
-      if (a.off.length() > 0.14) a.off.setLength(0.14);
+      if (a.off.length() > (a.settle ?? 0.14)) a.off.setLength(a.settle ?? 0.14);   // reach(…, { settle }) lets a leaning body correct further
     }
   }
 
@@ -436,6 +475,7 @@ export class Person {
 
     if (this.anim) this.anim(t, this, dt);
     if (this.ik) this.solveArms(dt);
+    if (this.aims) this.aimHands(dt);
     if (this.real) { this.real.sync(); if (this.ik) this.settleArms(); }
   }
 }

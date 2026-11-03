@@ -20,11 +20,14 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
       uP1: { value: new THREE.Vector2(-0.55, -0.06) }, uP2: { value: new THREE.Vector2(0.2, -0.06) },
       uR1: { value: new THREE.Vector2(0.1, 0.7) }, uR2: { value: new THREE.Vector2(0.09, 0.59) },
       uMid: { value: 0.45 }, uAmp: { value: 1.05 },
+      // white wherever the cabin (wheel, dash, arms) is in front of the glass: no rain is drawn there
+      tInside: { value: null }, uInside: { value: 0 },
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: /* glsl */`
       uniform sampler2D tDiffuse; uniform float uTime, uRain, uWipe, uWipeT, uBlur, uGW, uGL; uniform vec2 uRes; uniform vec4 uMask;
       uniform mat4 uInvProj, uCamWorld; uniform vec3 uG0, uGUp; uniform float uA1, uA2, uMid, uAmp; uniform vec2 uP1, uP2, uR1, uR2;
+      uniform sampler2D tInside; uniform float uInside;
       varying vec2 vUv;
       #define PI 3.14159265
       float h21(vec2 p){ p = fract(p*vec2(233.34, 851.73)); p += dot(p, p+23.45); return fract(p.x*p.y); }
@@ -99,6 +102,7 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
         vec3 hit = org + dir * th;
         vec2 gc = vec2(hit.x - uG0.x, dot(hit - uG0, uGUp));   // glass coords in meters
         float mask = th > 0.0 ? smoothstep(-uGW, -uGW + 0.05, gc.x) * (1.0 - smoothstep(uGW - 0.05, uGW, gc.x)) * smoothstep(0.0, 0.04, gc.y) * (1.0 - smoothstep(uGL - 0.02, uGL, gc.y)) : 0.0;
+        if (uInside > 0.5) mask *= 1.0 - texture2D(tInside, uv).r;
         if (mask < 0.001 || uRain < 0.001) { gl_FragColor = texture2D(tDiffuse, uv); return; }
         float t = uTime;
         // wipers
@@ -130,6 +134,25 @@ export function glassPass({ x0 = 0.0, x1 = 1.0, y0 = 0.32, y1 = 1.0, wipers = tr
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
+  // pass.inside = { scene, camera, layer }: objects on that layer are inside the car, in front of the glass
+  pass.inside = null;
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff }), clear = new THREE.Color();
+  let rt = null;
+  const render = pass.render.bind(pass);
+  pass.render = (renderer, writeBuffer, readBuffer, dt, mask) => {
+    const I = pass.inside;
+    if (I) {
+      const w = Math.ceil(readBuffer.width / 2), h = Math.ceil(readBuffer.height / 2);
+      if (!rt) rt = new THREE.WebGLRenderTarget(w, h); else if (rt.width !== w || rt.height !== h) rt.setSize(w, h);
+      const S = I.scene, cam = I.camera, layers = cam.layers.mask, bg = S.background, ov = S.overrideMaterial, ca = renderer.getClearAlpha();
+      renderer.getClearColor(clear);
+      cam.layers.set(I.layer); S.background = null; S.overrideMaterial = white;
+      renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(S, cam);
+      cam.layers.mask = layers; S.background = bg; S.overrideMaterial = ov; renderer.setClearColor(clear, ca);
+      pass.uniforms.tInside.value = rt.texture; pass.uniforms.uInside.value = 1;
+    }
+    render(renderer, writeBuffer, readBuffer, dt, mask);
+  };
   pass.update = (t, w, h, cam) => {
     const u = pass.uniforms; u.uTime.value = t; u.uRes.value.set(w, h);
     if (cam) { cam.updateMatrixWorld(); u.uInvProj.value.copy(cam.projectionMatrixInverse); u.uCamWorld.value.copy(cam.matrixWorld); }

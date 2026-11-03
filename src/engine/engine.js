@@ -150,6 +150,7 @@ export class Engine {
   /** depth of field: {focus (m from camera) | target Object3D/Vector3, aperture, maxblur} or null to switch off */
   dof(o) {
     if (!o) { this.bokeh.enabled = false; return; }
+    if (!this.bokeh.enabled) this.focusSnap = true; // switched on: start in focus, not from the last scene's distance
     this.bokeh.enabled = true;
     const u = this.bokeh.uniforms;
     if (o.aperture != null) u.aperture.value = o.aperture;
@@ -176,17 +177,24 @@ export class Engine {
     // paused: the picture holds and nothing in the story advances (see Director.pause)
     if (this.paused) { this.composer.render(); return; }
     this.adapt(Math.min(rawFull, 0.25));
-    const raw = Math.min(rawFull, 0.1);
+    // a long frame after steady ones is a hitch (a shader compiling, a texture uploading): the story holds still through it instead of jumping ahead
+    const avg = this.avgFrame ?? 1 / 60;
+    const raw = rawFull > 0.1 && rawFull > avg * 3 ? Math.min(avg, 0.1) : Math.min(rawFull, 0.1);
+    this.avgFrame = avg + (Math.min(rawFull, 0.25) - avg) * 0.1;
     const dt = raw * this.timeScale;
     this.time += dt;
     this.final.uniforms.uTime.value += raw;
     if (this.current && this.current.update) this.current.update(dt, this.time, raw);
     for (const fn of this.updaters) fn(dt, this.time, raw);
+    const cut = this.rig.snap;
     this.rig.update(raw, dt);
     if (this.lowDof) this.bokeh.enabled = false;
     if (this.bokeh.enabled) {
       if (this.focus) { const p = this.focus.isVector3 ? this.focus : this.focus.getWorldPosition(new THREE.Vector3()); this.focusT = p.distanceTo(this.camera.position); }
-      const u = this.bokeh.uniforms.focus; u.value += (this.focusT - u.value) * (1 - Math.exp(-6 * raw));
+      // a cut lands in focus; within a shot the focus pulls
+      const u = this.bokeh.uniforms.focus;
+      u.value = cut || this.focusSnap ? this.focusT : u.value + (this.focusT - u.value) * (1 - Math.exp(-6 * raw));
+      this.focusSnap = false;
     }
     this.composer.render();
   }

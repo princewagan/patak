@@ -7,6 +7,7 @@ import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
 import { billMesh } from '../engine/money.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
+import { mantel, monobloc, plate, riceMound, riceMaterial, friedFish, soupBowl, glass, kaldero, pitcher, spoon, sitY, Eater, facing, holdAt } from '../engine/meal.js';
 
 /*
   PART FOUR: ULIT. What his Part One choices actually did, one short shot per person.
@@ -17,16 +18,6 @@ import { animate, moveTo, walkPath } from '../engine/tween.js';
 */
 const PI = Math.PI;
 const _q = new THREE.Quaternion(), _v = new THREE.Vector3();
-
-// roughen a geometry along its normals (rice, so it doesn't read as a plastic dome)
-function lumpy(geo, amt, f = 140) {
-  const p = geo.attributes.position, n = geo.attributes.normal;
-  for (let i = 0; i < p.count; i++) {
-    const k = (Math.sin(p.getX(i) * f + p.getY(i) * f * 0.7) * Math.cos(p.getZ(i) * f * 0.9 + p.getX(i) * f * 0.4)) * amt;
-    p.setXYZ(i, p.getX(i) + n.getX(i) * k, p.getY(i) + n.getY(i) * k, p.getZ(i) + n.getZ(i) * k);
-  }
-  geo.computeVertexNormals(); return geo;
-}
 
 const GRADES = {
   // tender, warm against cool, but with the same crushed blacks as the rest of the game
@@ -238,9 +229,19 @@ export default {
     G.add(weng.root); this.people.push(weng);
     const nb = this.neighbor = new Person({ real: 'commuter', h: 1.53, build: 1.1 });
     G.add(nb.root); this.people.push(nb);
-    const bill = this.bill = new THREE.Group();   // ₱200: two ₱100 notes
-    for (const i of [0, 1]) { const n = billMesh(100, 0.15); n.rotation.set(-PI / 2, 0, i * 0.12); n.position.y = i * 0.002; bill.add(n); }
-    nb.arm.R.wr.add(bill); bill.position.set(0, -0.09, 0.02);
+    // ₱200: two ₱100 notes, slightly fanned. The bill group points along +Z from the end that is held; its face is +Y
+    const bill = this.bill = new THREE.Group();
+    for (const i of [0, 1]) { const n = billMesh(100, 0.15); n.rotation.set(-PI / 2, 0, PI / 2 + i * 0.07); n.position.set(i * 0.004, i * 0.0012, 0.068 + i * 0.002); bill.add(n); }
+    bill.userData.far = new THREE.Vector3(0, 0.001, 0.13);   // the other end, where the hand taking it pinches
+    // pinched between thumb and first fingers, the notes going on past the thumb
+    const hsN = nb.s / 0.9;
+    this.billGrip = { pos: new THREE.Vector3(0.012 * hsN, -0.06 * hsN, 0.036 * hsN), q: facing(new THREE.Vector3(0, -0.35, 0.94), new THREE.Vector3(-1, 0, 0)) };
+    nb.arm.R.wr.add(bill); bill.position.copy(this.billGrip.pos); bill.quaternion.copy(this.billGrip.q);
+    // where the notes will sit in Ate Weng's hand once she has them: her fingers on the far end, pointing back the way they came
+    const hsW = weng.s / 0.9, dW = new THREE.Vector3(0, -0.35, 0.94).normalize(), take = this.takeProxy = new THREE.Object3D();
+    take.quaternion.copy(facing(dW.clone().negate(), new THREE.Vector3(-1, 0, 0)));
+    take.position.set(0.012 * hsW, -0.06 * hsW, 0.036 * hsW).sub(bill.userData.far.clone().applyQuaternion(take.quaternion));
+    weng.arm.R.wr.add(take);
   },
 
   /* ---------------- set 3: Lola Ising's table ---------------- */
@@ -272,50 +273,51 @@ export default {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), glow(0xffd9a0, 6)); bulb.position.set(0, 1.68, 0); G.add(bulb);
     const bl = this.bulb = new THREE.PointLight(0xffd6ae, 7.5, 7, 1.6); bl.position.set(0, 1.6, 0); bl.castShadow = true; bl.shadow.mapSize.set(1024, 1024); bl.shadow.bias = -0.003; bl.shadow.radius = 3; G.add(bl);
     G.add(new THREE.HemisphereLight(0x3a4a60, 0x1a140e, 0.45));
-    // low table
-    const ply = pbr('plywood', { repeat: [1, 1], color: 0xa58a68, rough: 0.7 });
-    G.add(at(box(1.1, 0.04, 0.72, ply, 0.01), 0, 0.36, 0));
-    for (const [x, z] of [[-0.5, -0.31], [0.5, -0.31], [-0.5, 0.31], [0.5, 0.31]]) G.add(at(box(0.05, 0.34, 0.05, std(0x5b4632)), x, 0.17, z));
-    // pot, pitcher, a shared bowl of ulam
-    const pot = cyl(0.13, 0.11, 0.14, std(0xb9bcbe, { metal: 0.3, rough: 0.45 }), 24); pot.position.set(0.41, 0.45, -0.24); G.add(pot);
-    G.add(at(cyl(0.135, 0.135, 0.015, std(0xc4c7c9, { metal: 0.3, rough: 0.4 }), 24), 0.41, 0.527, -0.24));
-    const pm = new THREE.MeshPhysicalMaterial({ color: 0x6fa9cf, roughness: 0.2, transparent: true, opacity: 0.6 }); const pitcher = cyl(0.06, 0.07, 0.2, pm); pitcher.position.set(-0.35, 0.48, -0.2); G.add(pitcher); const hdl = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.01, 6, 12, PI), pm); hdl.position.set(-0.42, 0.49, -0.2); hdl.rotation.z = PI / 2; G.add(hdl);
-    const bowl = cyl(0.08, 0.05, 0.05, std(0xeeeeea, { rough: 0.3 }), 20); bowl.position.set(0.16, 0.405, 0.05); G.add(bowl);
-    G.add(at(cyl(0.07, 0.07, 0.005, std(0x6b3a1e, { rough: 0.4 }), 20), 0.16, 0.43, 0.05));
-    // plates: three kids + Lola's place (z+ side, toward camera)
-    const plateM = new THREE.MeshStandardMaterial({ color: 0xd9d6cf, roughness: 0.25 });
-    const riceM = new THREE.MeshStandardMaterial({ color: 0xd8d2c2, roughness: 0.8 });
-    const mkPlate = (x, z, full) => {
-      const g = new THREE.Group(); g.position.set(x, 0.385, z);
-      g.add(cyl(0.105, 0.085, 0.014, plateM, 30));
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.008, 6, 30), plateM); rim.rotation.x = PI / 2; rim.position.y = 0.007; g.add(rim);
-      const rice = new THREE.Mesh(lumpy(new THREE.SphereGeometry(0.068, 28, 16, 0, PI * 2, 0, PI / 2), 0.004), riceM);
-      rice.scale.set(1, 0.62, 1); rice.position.y = 0.006; rice.castShadow = true; rice.visible = full; g.add(rice);
-      const spoon = box(0.012, 0.004, 0.13, std(0xc7cbcf, { metal: 0.9, rough: 0.25 })); spoon.position.set(0.075, 0.012, 0.0); spoon.rotation.y = 0.3; g.add(spoon);
-      g.userData.rice = rice; G.add(g); return g;
+    // the table: a small wooden dining table under a plastic floral mantel, four monobloc chairs, one bulb
+    const T = this.T = { w: 1.0, d: 0.7, h: 0.7 };
+    const wood = pbr('wood_table_001', { repeat: [1, 1], color: 0xc9a27e, rough: 0.85 });
+    G.add(at(box(T.w, 0.024, T.d, wood, 0.004), 0, T.h - 0.012, 0));
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) G.add(at(box(0.045, T.h - 0.024, 0.045, wood, 0.004), sx * (T.w / 2 - 0.055), (T.h - 0.024) / 2, sz * (T.d / 2 - 0.055)));
+    for (const sz of [-1, 1]) G.add(at(box(T.w - 0.13, 0.07, 0.02, wood), 0, T.h - 0.06, sz * (T.d / 2 - 0.055)));
+    for (const sx of [-1, 1]) G.add(at(box(0.02, 0.07, T.d - 0.13, wood), sx * (T.w / 2 - 0.055), T.h - 0.06, 0));
+    const top = this.tableTop = T.h + 0.002;
+    G.add(mantel(T.w, T.d, top, 0.15));
+    // where everyone sits: [chair colour, x, z, facing]
+    this.places = {
+      a: [0x3d7a4e, -0.73, 0.0, PI / 2], b: [0xe7e4dc, 0.0, -0.57, 0], c: [0xb5392c, 0.73, 0.02, -PI / 2], lola: [0xe7e4dc, 0.0, 0.6, PI],
     };
-    this.plates = [mkPlate(-0.36, 0.0, true), mkPlate(0.0, -0.22, true), mkPlate(0.36, 0.0, true)];
-    this.lolaPlate = mkPlate(0.0, 0.24, true);
-    // three grandkids, sitting on the floor
-    const floorSit = (p, h) => ({ y: -(0.53 * h - 0.13), hpL: [-80, 0, 24], hpR: [-80, 0, -24], knL: [150, 0, 0], knR: [150, 0, 0], anL: [-30, 0, 0], anR: [-30, 0, 0], spine: [10, 0, 0], neck: [24, 0, 0], shL: [-34, 0, 10], elL: [-60, 0, 0], shR: [-44, 0, -8], elR: [-70, 0, 0] });
-    const mkKid = (o, x, z, ry) => { const p = new Person(o); p.set(floorSit(p, o.h), true); p.root.position.set(x, 0, z); p.root.rotation.y = ry; G.add(p.root); this.people.push(p); return p; };
-    this.kids = [
-      mkKid({ h: 1.1, skin: 'brown', top: 0xc9443c, bottom: 0x2b2d33, hair: 'messy', build: 0.82, shorts: true, barefoot: true }, -0.74, 0.0, PI / 2),
-      mkKid({ h: 1.0, skin: 'tan', top: 0xe8c35a, bottom: 0x3a3f4a, hair: 'long', build: 0.8, shorts: true, barefoot: true }, 0.0, -0.62, 0),
-      mkKid({ h: 1.18, skin: 'brown', top: 0x4f7aa8, bottom: 0x2b2d33, hair: 'short', build: 0.84, shorts: true, barefoot: true }, 0.74, 0.0, -PI / 2),
-    ];
-    // spoon-to-mouth, each at its own rhythm
-    this.kids.forEach((k, i) => {
-      k.anim = (t, p) => {
-        const ph = (t * 0.32 + i * 0.37) % 1, raise = Math.max(0, Math.sin(Math.min(1, Math.max(0, (ph - 0.55) / 0.35)) * PI));
-        p.arm.R.sh.rotation.x = p.target.shR.x - 0.55 * raise; p.arm.R.el.rotation.x = p.target.elR.x - 0.75 * raise;
-        p.neck.rotation.x = p.target.neck.x - 0.35 * raise;
-      };
-    });
-    // Lola Ising
+    this.chairs = {};
+    for (const [k, [col, x, z, ry]] of Object.entries(this.places)) { const c = monobloc(col); c.position.set(x, 0, z); c.rotation.y = ry; G.add(c); this.chairs[k] = c; }
+    // on the table: a plate at each place, the kaldero on a pot holder, a mangkok of sabaw, fried galunggong, water
+    const riceM = this.riceM = riceMaterial();
+    const setPlace = (k, x, z, full = true) => {
+      const pl = plate(0.112); pl.position.set(x, top, z); G.add(pl);
+      const r = riceMound(0.06, 0.034, riceM, x * 7 + z * 3); r.position.set(0, pl.userData.top, 0); r.rotation.y = x + z; r.visible = full; pl.add(r);
+      const ry = this.places[k][3], f = friedFish(0.1); f.position.set(Math.sin(ry + 1.9) * 0.062, pl.userData.top + 0.002, Math.cos(ry + 1.9) * 0.062); f.rotation.y = ry + 0.9; f.visible = full; pl.add(f);
+      pl.userData.rice = r; pl.userData.fish = f; return pl;
+    };
+    this.plates = { a: setPlace('a', -0.36, 0.0), b: setPlace('b', 0.0, -0.215), c: setPlace('c', 0.36, 0.01), lola: setPlace('lola', 0.0, 0.215) };
+    const holder = box(0.2, 0.008, 0.2, new THREE.MeshStandardMaterial({ color: 0x8a3b2e, roughness: 0.95 }), 0.003); holder.position.set(0.35, top + 0.004, -0.23); holder.rotation.y = 0.2; G.add(holder);
+    const pot = kaldero(); pot.position.set(0.35, top + 0.008, -0.23); pot.rotation.y = 0.5; G.add(pot);
+    const soup = soupBowl(0.07); soup.position.set(-0.1, top, -0.005); G.add(soup);
+    const ladle = spoon(); ladle.scale.setScalar(1.25); ladle.position.set(-0.075, top + 0.062, 0.018); ladle.rotation.set(-0.55, 2.4, 0); G.add(ladle);
+    const saucer = plate(0.08); saucer.position.set(0.12, top, 0.0); G.add(saucer);
+    for (const [x, z, r] of [[-0.02, 0.012, 0.4], [0.025, -0.014, 2.9]]) { const f = friedFish(0.11); f.position.set(x, saucer.userData.top + 0.002, z); f.rotation.y = r; saucer.add(f); }
+    const jug = pitcher(); jug.position.set(-0.38, top, -0.24); jug.rotation.y = -0.6; G.add(jug);
+    this.glasses = {};
+    for (const [k, x, z] of [['a', -0.37, 0.19], ['b', -0.2, -0.24], ['lola', 0.15, 0.29]]) { const g = glass(); g.position.set(x, top, z); G.add(g); this.glasses[k] = g; }
+    // three grandkids, real bodies, each in the shirt they wear at home
+    const sit = (o, k) => {
+      const p = new Person(o), [, x, z, ry] = this.places[k];
+      p.pose('sit', true).set({ y: sitY(p, 0.44), hpL: [-86, 0, 4], hpR: [-86, 0, -4], knL: [80, 0, 0], knR: [84, 0, 0], spine: [0, 0, 0], neck: [0, 0, 0], shL: [-20, 0, 8], shR: [-20, 0, -8], elL: [-60, 0, 0], elR: [-60, 0, 0] }, true);
+      p.root.position.set(x - Math.sin(ry) * 0.03, 0, z - Math.cos(ry) * 0.03); p.root.rotation.y = ry; G.add(p.root); this.people.push(p); return p;
+    };
+    this.kids = [sit({ real: 'apo1', h: 1.44, build: 0.86 }, 'a'), sit({ real: 'apo2', h: 1.36, build: 0.84 }, 'b'), sit({ real: 'apo3', h: 1.52, build: 0.88 }, 'c')];
+    this.eaters = this.kids.map((p, i) => new Eater(p, { plate: this.plates['abc'[i]], rice: this.plates['abc'[i]].userData.rice, riceMat: riceM, period: [4.6, 5.3, 4.9][i], phase: [0.15, 0.62, 0.38][i], lean: 10, neck: 18 }));
+    // Lola Ising, at her own place
     const lola = this.lolaP = new Person({ real: 'lola', h: 1.48, skin: 'brown', top: 0x6f7f94, bottom: 0x6f7f94, skirt: true, hair: 'bun', hairColor: 0x9a948c, build: 0.95 });
     G.add(lola.root); this.people.push(lola);
-    this.stool = cyl(0.17, 0.15, 0.3, std(0x6a4e34, { rough: 0.7 }), 16); G.add(this.stool);
+    this.lolaEats = new Eater(lola, { plate: this.plates.lola, rice: this.plates.lola.userData.rice, riceMat: riceM, period: 6.4, phase: 0.8, lean: 8, neck: 16 });
   },
 
   activate(name) {
@@ -432,29 +434,43 @@ export default {
       rig.move({ pos: [0.5, 1.12, 3.4], look: [0.12, 0.92, 0.4], fov: 32, dur: 10.5, e: 'linear' });
       this.engine.dof({ target: this.board, aperture: 0.003, maxblur: 0.007 });
     } else {
-      const w = this.ateWeng, nb = this.neighbor;
-      // first left gate sits at x≈-2.9, z = 4 - 1.2 = 2.8
-      w.root.position.set(-2.32, 0, 2.8); w.root.rotation.y = -PI / 2;
-      w.pose('stand', true).set({ spine: [4, 0, 0], neck: [6, 0, 0], shR: [-18, 0, -6], elR: [-40, 0, 0] }, true);
-      nb.root.position.set(-3.32, 0, 2.8); nb.root.rotation.y = PI / 2;
-      nb.pose('stand', true).set({ shR: [-20, 0, -4], elR: [-40, 0, 0] }, true);
-      this.bill.visible = true;
-      if (this.bill.parent !== nb.arm.R.wr) { nb.arm.R.wr.add(this.bill); this.bill.position.set(0, -0.09, 0.02); this.bill.rotation.set(0, 0, 0); }
+      const w = this.ateWeng, nb = this.neighbor, bill = this.bill, G = this.billGrip;
+      // first left gate: its wall line is x = -2.93, the gap between two bars is centred on z = 2.8 (bars every 0.136 m)
+      w.root.position.set(-2.34, 0, 2.8); w.root.rotation.y = -PI / 2;
+      w.pose('stand', true).set({ spine: [4, 0, 0], neck: [8, 0, 0], shR: [-14, 0, -6], elR: [-30, 0, 0], shL: [-8, 0, 6], elL: [-20, 0, 0] }, true);
+      nb.root.position.set(-3.26, 0, 2.8); nb.root.rotation.y = PI / 2;
+      nb.pose('stand', true).set({ shR: [-24, 0, -4], elR: [-70, 0, 0], neck: [6, 0, 0] }, true);
+      // the notes start in the neighbor's hand, held low against her
+      if (bill.parent !== nb.arm.R.wr) nb.arm.R.wr.add(bill);
+      bill.position.copy(G.pos); bill.quaternion.copy(G.q); bill.visible = true;
+      nb.grip('R', 'pinch'); w.grip('R', 'rest');
+      const thru = new THREE.Vector3(-2.87, 1.1, 2.8);   // just past the bars, on Ate Weng's side
+      const billQ = facing(new THREE.Vector3(1, -0.12, 0.0), new THREE.Vector3(0, 1, 0));
+      const billAt = new THREE.Vector3(), billQW = new THREE.Quaternion();
       rig.set({ pos: [-1.2, 1.28, -0.4], look: [-2.62, 1.12, 2.8], fov: 28 });
       rig.move({ pos: [-1.45, 1.22, 0.35], look: [-2.66, 1.1, 2.8], fov: 24, dur: 10.5, e: 'sine' });
-      this.engine.dof({ target: this.bill, aperture: 0.007, maxblur: 0.011 });
+      this.engine.dof({ target: bill, aperture: 0.007, maxblur: 0.011 });
       (async () => {
-        await D.wait(1.6);
-        nb.set({ shR: [-70, 0, -4], elR: [-14, 0, 0] });                  // reaches through the bars
-        await D.wait(1.0);
-        w.set({ shR: [-66, 0, -8], elR: [-16, 0, 0] });
-        await D.wait(1.1);
-        w.arm.R.wr.attach(this.bill);                                    // the bills change hands
-        nb.set({ shR: [-18, 0, -4], elR: [-40, 0, 0] });
-        await D.wait(0.5);
-        w.set({ shR: [-26, 0, -6], elR: [-80, 0, 0], spine: [18, 0, 0], neck: [22, 0, 0] }); // a small bow of thanks
         await D.wait(1.4);
-        w.set({ spine: [4, 0, 0], neck: [8, 0, 0] });
+        // she pushes the notes through the gap in the bars, held flat by one end
+        const from = new THREE.Vector3(); bill.getWorldPosition(from);
+        const t = { k: 0 };
+        holdAt(nb, 'R', bill, new THREE.Vector3(), () => billAt.lerpVectors(from, thru, t.k), () => billQ, { rate: 10 });
+        await animate(k => (t.k = k), 1.1, 'inOut');
+        // Ate Weng takes the far end between her fingers
+        w.set({ spine: [10, 0, 0], neck: [14, 0, 0] });
+        w.grip('R', 'pinch');
+        holdAt(w, 'R', this.takeProxy, new THREE.Vector3(), () => bill.getWorldPosition(billAt), () => bill.getWorldQuaternion(billQW), { rate: 7 });
+        await D.wait(1.0);
+        // the notes change hands: now hers, exactly where they were
+        w.arm.R.wr.attach(bill);
+        nb.reach('R', null, { rate: 5 }); nb.aim('R', null, { rate: 5 }); nb.grip('R', 'rest');
+        nb.set({ shR: [-18, 0, -4], elR: [-40, 0, 0] });
+        // she brings them in to her chest, the other hand coming up over them, and bows a little
+        w.reach('R', null, { rate: 4 }); w.aim('R', null, { rate: 4 });
+        w.set({ shR: [-20, 0, -12], elR: [-98, 0, 0], wrR: [8, 0, 0], shL: [-16, 0, 10], elL: [-84, 0, 0], spine: [16, 0, 0], neck: [20, 0, 0] });
+        await D.wait(1.5);
+        w.set({ spine: [6, 0, 0], neck: [10, 0, 0] });
       })();
     }
     await D.black(false, 1.2);
@@ -469,32 +485,43 @@ export default {
 
   async lola(D, S) {
     this.activate('lola');
-    const rig = this.engine.rig, helped = !!S.bigas, lola = this.lolaP;
+    const rig = this.engine.rig, helped = !!S.bigas, lola = this.lolaP, [, lx, lz, lry] = this.places.lola;
     audio.layer('traffic', 0); audio.layer('murmur', 0); audio.rain(0.28, 0.85); audio.fan(0.5); audio.scape('tahanan', 0.7);
     cast(D).remind('Lola Ising', "'Yung kinulang sa bigas. Tatlo ang apo niya.", 6);
-    this.lolaPlate.userData.rice.visible = helped;
+    const pl = this.plates.lola;
+    pl.userData.rice.visible = helped; pl.userData.fish.visible = helped;
+    const t0 = this.engine.time;
+    this.eaters.forEach(e => e.start(t0));
+    lola.root.position.set(lx, 0, lz - 0.03); lola.root.rotation.y = lry;
     if (helped) {
-      // at the table with them, eating
+      // at the table with them, eating her own plate, slower than the kids
       lola.shade(1);
-      this.stool.position.set(0.0, 0.15, 0.68);
-      lola.root.position.set(0.0, 0, 0.66); lola.root.rotation.y = PI;
-      lola.pose('sit', true).set({ y: -0.46, spine: [16, 0, 0], neck: [16, 0, 0], shL: [-40, 0, 8], elL: [-50, 0, 0], shR: [-48, 0, -8], elR: [-62, 0, 0] }, true);
-      lola.anim = (t, p) => {
-        const ph = (t * 0.25 + 0.6) % 1, raise = Math.max(0, Math.sin(Math.min(1, Math.max(0, (ph - 0.5) / 0.4)) * PI));
-        p.arm.R.sh.rotation.x = p.target.shR.x - 0.5 * raise; p.arm.R.el.rotation.x = p.target.elR.x - 0.7 * raise;
-      };
-      rig.set({ pos: [1.2, 1.62, 1.28], look: [-0.02, 0.4, 0.02], fov: 36 });
-      rig.move({ pos: [1.02, 1.46, 1.08], look: [-0.02, 0.42, 0.02], fov: 34, dur: 11, e: 'sine' });
-      this.engine.dof({ target: this.plates[1], aperture: 0.0025, maxblur: 0.006 });
+      lola.pose('sit', true).set({ y: sitY(lola, 0.44), hpL: [-80, 0, 5], hpR: [-80, 0, -5], knL: [78, 0, 0], knR: [78, 0, 0], spine: [0, 0, 0], neck: [0, 0, 0] }, true);
+      lola.expression({ smile: 0.25 });
+      this.lolaEats.start(t0);
+      rig.set({ pos: [1.05, 1.42, 1.32], look: [-0.05, 0.74, -0.02], fov: 38 });
+      rig.move({ pos: [0.9, 1.34, 1.16], look: [-0.05, 0.75, -0.02], fov: 35, dur: 11, e: 'sine' });
+      this.engine.dof({ target: this.plates.b, aperture: 0.0022, maxblur: 0.006 });
     } else {
-      // a little apart, in the shadow past the bulb, watching them eat. The empty plate is the shot, same framing as the full one.
-      this.stool.position.set(-0.95, 0.15, 1.0);
-      lola.root.position.set(-0.95, 0, 0.98); lola.root.rotation.y = Math.atan2(0.95, -0.98); lola.shade(0.32);
-      lola.pose('sit', true).set({ y: -0.46, spine: [8, 0, 0], neck: [10, 0, 0], shL: [-22, 0, 12], elL: [-62, -25, 0], shR: [-22, 0, -12], elR: [-62, 25, 0] }, true);
-      lola.anim = null; lola.look(this.kids[1].head, 0.6);
-      rig.set({ pos: [1.2, 1.62, 1.28], look: [-0.12, 0.4, 0.14], fov: 36 });
-      rig.move({ pos: [1.02, 1.46, 1.08], look: [-0.14, 0.42, 0.16], fov: 34, dur: 11, e: 'sine' });
-      this.engine.dof({ target: this.lolaPlate, aperture: 0.0035, maxblur: 0.008 });
+      // her plate is clean, the spoon and fork laid on it. She has a glass of water in her hands and watches them eat.
+      lola.shade(0.55);
+      this.lolaEats.stop();
+      lola.pose('sit', true).set({ y: sitY(lola, 0.44), hpL: [-80, 0, 5], hpR: [-80, 0, -5], knL: [78, 0, 0], knR: [78, 0, 0], spine: [6, 0, 0], neck: [8, 0, 0] }, true);
+      lola.expression({ smile: 0.08, sad: 0.15 });
+      const e = this.lolaEats, g = this.glasses.lola;
+      // the cutlery rests on her empty plate
+      for (const [k, x, ry] of [[e.spoon, 0.025, 0.08], [e.fork, -0.025, -0.08]]) { pl.attach(k); k.position.set(x, 0.009, -0.005); k.rotation.set(0, ry, 0); k.userData.onPlate = true; }
+      e.bite.visible = false;
+      // both hands round the glass
+      const gp = g.getWorldPosition(new THREE.Vector3()), gr = g.userData.r;
+      // her right hand round the glass, the left resting on the table's edge
+      lola.grip('R', 'hold');
+      lola.reach('R', gp.clone().add(new THREE.Vector3(gr + 0.028, 0.05, 0.012)), { rate: 30, pole: [-1, -1, -0.3], wrist: [0, 0, 0] });
+      lola.reach('L', new THREE.Vector3(lx - 0.17, this.tableTop + 0.022, lz - 0.3), { rate: 30, pole: [1, -1, -0.3], wrist: [-10, 0, 0] });
+      lola.look(this.kids[1].head, 0.7);
+      rig.set({ pos: [1.05, 1.42, 1.32], look: [-0.05, 0.74, 0.04], fov: 38 });
+      rig.move({ pos: [0.9, 1.34, 1.16], look: [-0.05, 0.75, 0.08], fov: 35, dur: 11, e: 'sine' });
+      this.engine.dof({ target: pl, aperture: 0.0028, maxblur: 0.007 });
     }
     await D.black(false, 1.2);
     D.stamp('<b>Martes, 8:20 PM</b>', 4);
@@ -504,6 +531,7 @@ export default {
     await D.wait(helped ? 0.8 : 1.5);
     await D.black(true, 1.0);
     lola.look(null);
+    this.eaters.forEach(e => e.stop()); this.lolaEats.stop();
   },
 
   async play(D, S, beat) {

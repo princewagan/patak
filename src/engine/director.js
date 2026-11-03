@@ -13,6 +13,13 @@ class Clock {
   tick(dt) { this.now += dt; for (const j of [...this.jobs]) if (j.at <= this.now) { this.jobs.delete(j); j.fn(); } }
 }
 
+/* CSS 'ease', cubic-bezier(.25,.1,.25,1): the curve the fades have always used */
+function easeCss(x) {
+  let t = x;
+  for (let i = 0; i < 6; i++) { const u = 1 - t, f = 0.75 * u * u * t + 0.75 * u * t * t + t * t * t - x; t = Math.min(1, Math.max(0, t - f / (0.75 * u * u + 2.25 * t * t))); }
+  const u = 1 - t; return 0.3 * u * u * t + 3 * u * t * t + t * t * t;
+}
+
 /* What helping costs him, shown under the helping option (index 0) while the clock runs.
    Only the everyday choices; Part Three is what really happened, so it gets none. A scene can also pass 'Label|line|cost'. */
 const COST = {
@@ -28,7 +35,8 @@ export class Director {
     this.engine = engine;
     this.state = { choices: {}, wallet: 160 };
     this.clock = new Clock();
-    engine.onUpdate((dt, t, raw) => this.clock.tick(raw));
+    this.fade = { v: 1, from: 1, to: 1, t: 0, dur: 0, done: null };
+    engine.onUpdate((dt, t, raw) => { this.stepFade(raw); this.clock.tick(raw); });
     this.skipLine = null;
     this.choiceKeys = null;
     this.askKeys = null;
@@ -74,9 +82,25 @@ export class Director {
   readTime(text) { return Math.min(6.2, Math.max(2.0, 1.0 + text.length * 0.05)); }
 
   // ---------- fades / bars ----------
-  async black(on, s = 1.2) {
-    const f = $('#fader'); f.style.transitionDuration = s + 's'; f.style.opacity = on ? 1 : 0;
-    await this.wait(s);
+  /*
+    The fade is drawn by the frame loop, not by a CSS transition, so it can never run ahead of the picture.
+    A CSS fade kept going while a new scene compiled, and showed the last frame of the old shot until the new one arrived.
+    Now a stalled frame holds the fade with it, and the first frame of a fade sits where it starts,
+    so a cut made under black is on the canvas before any of it shows.
+  */
+  black(on, s = 1.2) {
+    const F = this.fade;
+    F.done?.(); // a newer fade takes over from one still running
+    return new Promise(res => Object.assign(F, { from: F.v, to: on ? 1 : 0, t: 0, dur: this.fast ? s * 0.15 : s, fresh: true, done: res }));
+  }
+  stepFade(raw) {
+    const F = this.fade;
+    if (!F.done) return;
+    if (F.fresh) F.fresh = false; else F.t += raw;
+    const k = F.dur > 0 ? Math.min(1, F.t / F.dur) : 1;
+    F.v = F.from + (F.to - F.from) * easeCss(k);
+    $('#fader').style.opacity = F.v;
+    if (k >= 1) { const d = F.done; F.done = null; d(); }
   }
   bars(on) { document.body.classList.toggle('nobars', !on); }
 
