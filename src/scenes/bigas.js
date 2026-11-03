@@ -390,24 +390,62 @@ export default {
     }
     arm.visible = false;
   },
-  /** the tindera sweeps the coins off the ledge into her hand and drops them in her tin */
+  /**
+   * The tindera puts the side of her hand down on the ledge past the coins and sweeps them together in one stroke.
+   * A coin only moves once her hand has reached it, and it slides on the wood. Then she closes her hand on the little pile
+   * and lets it go inside her tin. Nothing ever moves through the air on its own.
+   */
   async takeCoins(coins) {
-    const tin = this.tindera, hand = new THREE.Vector3();
-    tin.set({ spine: [18, 0, 0] });
-    for (const c of coins) {
-      tin.reach('R', hand.copy(c.position).add(new THREE.Vector3(0, 0.06, -0.06)), { rate: 10 });
-      await new Promise(r => setTimeout(r, 0));
-      await this.wait(0.32);
-      const p0 = c.position.clone(); audio.tone(4800 + Math.random() * 600, 0.08, { vol: 0.02 });
-      await animate(k => { c.position.lerpVectors(p0, hand, k); }, 0.18, 'in');
-      tin.arm.R.wr.attach(c);
-    }
-    tin.reach('R', this.lata.position.clone().add(new THREE.Vector3(0, 0.2, 0)), { rate: 7 });
-    await this.wait(0.55);
-    const drop = this.lata.position.clone().add(new THREE.Vector3(0, 0.06, 0));
-    for (const c of coins) { this.scene.attach(c); const p0 = c.position.clone(); await animate(k => c.position.lerpVectors(p0, drop, k), 0.12, 'in'); c.visible = false; c.position.copy(c.userData.home); c.rotation.set(0, 0, 0); }
+    // her left hand: the tin is on her left, and a left hand sweeping to her left leads with its little-finger edge
+    const tin = this.tindera, y = LEDGE + 0.0015, x0 = tin.root.position.x, z0 = tin.root.position.z, NEAR = [-0.04, -0.15], EDGE = 0.04;
+    const xs = coins.map(c => c.position.x), z = coins.reduce((a, c) => a + c.position.z, 0) / coins.length;
+    const xA = Math.min(...xs) - EDGE - 0.02, xB = Math.max(...xs) - EDGE + 0.01;
+    // the visible hand. The arm is solved for the wrist, so aim the wrist wherever puts the middle of the palm on the spot
+    const wr = tin.real ? tin.real.hand.L : tin.arm.L.wr, knuckle = tin.real?.group.getObjectByName('Bip01_L_Finger2');
+    const palm = new THREE.Vector3(), kn = new THREE.Vector3(), wrist = new THREE.Vector3(), aim = new THREE.Vector3();
+    const palmAt = () => { wr.getWorldPosition(palm); if (knuckle) palm.lerp(knuckle.getWorldPosition(kn), 0.5); return palm; };
+    const want = new THREE.Vector3(xA, LEDGE + 0.012, z);
+    const onPalm = () => { palmAt(); wr.getWorldPosition(wrist); return aim.copy(want).sub(palm).add(wrist); };
+    // she steps up to the window and leans in through the opening: from where she stands, her arm doesn't reach
+    tin.look(new THREE.Vector3((xA + xB) / 2 + EDGE, LEDGE, z), 1); tin.set({ spine: [36, -8, 0] });
+    tin.grip?.('L', 'open');
+    tin.reach('L', onPalm, { rate: 9, settle: 0.3 });
+    await animate(k => { tin.root.position.x = x0 + (NEAR[0] - x0) * k; tin.root.position.z = z0 + (NEAR[1] - z0) * k; }, 0.4, 'inOut');
+    await this.wait(0.15);
+    // one stroke: a coin moves only once the edge of her hand gets to it, so they bunch up into a pile in front of it
+    const pushed = [], spread = coins.map((_, i) => [(i % 3) * 0.007, ((i * 7) % 5 - 2) * 0.006]);
+    audio.tone(1900, 0.32, { vol: 0.012 });
+    await animate(k => {
+      want.x = xA + (xB - xA) * k;
+      const p = palmAt(), lead = p.x + EDGE;
+      coins.forEach((c, i) => {
+        if (!pushed.includes(c) && c.position.x < lead && Math.abs(c.position.z - p.z) < 0.06) pushed.push(c);
+        if (!pushed.includes(c)) return;
+        c.position.x = Math.max(c.position.x, lead + spread[i][0]);
+        c.position.z += (p.z + spread[i][1] - c.position.z) * 0.2;
+        c.position.y = y + pushed.indexOf(c) * 0.0018;
+      });
+    }, 0.55, 'inOut');
+    // her palm goes over the pile and closes on it
+    const pile = coins.reduce((a, c) => a.add(c.position), new THREE.Vector3()).divideScalar(coins.length);
+    want.set(pile.x, LEDGE + 0.018, pile.z);
+    await this.wait(0.18);
+    tin.grip?.('L', 'fist');
+    await this.wait(0.2);
+    for (const c of coins) c.visible = false;
+    audio.tone(4800 + Math.random() * 600, 0.08, { vol: 0.02 });
+    // she steps back, and her fist goes to the rim of the tin before it opens
+    tin.look(this.lata.position, 1); tin.set({ spine: [12, 10, 0] });
+    tin.ik?.L?.off.set(0, 0, 0);   // the long correction was for the far reach, not this one
+    tin.reach('L', this.lata.position.clone().add(new THREE.Vector3(0, 0.16, 0)), { rate: 8, settle: 0.3 });
+    await animate(k => { tin.root.position.x = NEAR[0] + (x0 - NEAR[0]) * k; tin.root.position.z = NEAR[1] + (z0 - NEAR[1]) * k; }, 0.4, 'inOut');
+    await this.wait(0.15);
+    tin.grip?.('L', 'open');
     audio.coin();
-    tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
+    await this.wait(0.15);
+    for (const c of coins) { c.position.copy(c.userData.home); c.rotation.set(0, 0, 0); }
+    tin.grip?.('L', 'rest'); tin.look(null);
+    tin.reach('L', null); tin.set({ spine: [0, 0, 0] });
   },
   wait(s) { return new Promise(r => { let t = 0; const stop = this.engine.onUpdate((dt, _, raw) => { t += raw; if (t >= s) { stop(); r(); } }); }); },
 
@@ -522,18 +560,25 @@ export default {
       // the tindera takes it all, and fills a whole kilo
       await this.takeCoins([...this.ledgeCoins, this.myCoins[0]]);
       await fetchBag(this.bagFull);
-      const { hl } = await takeBag(this.bagFull);
-      // Lola turns to you and takes your hand
-      await animate(k => { lola.root.rotation.y = PI - k * (PI - 0.3); lola.root.position.x = 0.02 + k * 0.1; lola.root.position.z = 0.74 + k * 0.2; }, 1.2);
-      lola.expression({ smile: 0.6, sad: 0 }); lola.set({ spine: [10, 0, 0], neck: [16, 0, 0] });
+      await takeBag(this.bagFull);
+      // Lola turns to you. Her back stays bent: she does not lift her head to you, only her eyes.
+      // The bag goes into the crook of her left arm and she holds her right hand out to you, a little unsteady.
+      const bag = this.bagFull, b0 = bag.position.clone(), b1 = new THREE.Vector3(0.1, -0.11, 0.15);
+      await animate(k => { lola.root.rotation.y = PI - k * (PI - 0.3); lola.root.position.x = 0.02 + k * 0.1; lola.root.position.z = 0.74 + k * 0.2; bag.position.lerpVectors(b0, b1, k); bag.rotation.y = -0.35 * k; }, 1.2);
+      lola.expression({ smile: 0.45, sad: 0.2 });
+      lola.set({ spine: [22, 0, 0], chest: [10, 0, 0], neck: [-14, 0, 0], hpL: [-8, 0, 0], hpR: [-8, 0, 0], knL: [14, 0, 0], knR: [14, 0, 0], anL: [-6, 0, 0], anR: [-6, 0, 0], y: -0.01 });
+      lola.eyeUp = 0.2;
+      const palm = new THREE.Vector3(), t0 = performance.now();
+      const offer = () => { const t = (performance.now() - t0) / 1000; return lola.root.localToWorld(palm.set(-0.05 + Math.sin(t * 5.3) * 0.002, 0.94 + Math.sin(t * 6.1 + 1) * 0.002 + Math.sin(t * 0.7) * 0.006, 0.36)); };
+      lola.reach('R', offer, { rate: 2.5, twist: -70, wrist: [30, 0, 0] });
       E.dof({ target: lola.head, aperture: 0.004 });
-      await cam([0.46, 1.56, 1.92], [0.16, 1.2, 1.0], 1.4, 38);
-      lola.look(E.camera, 1);
+      await cam([0.46, 1.56, 1.92], [0.16, 1.07, 1.13], 1.4, 42);
       rig.move({ pos: [0.45, 1.55, 1.9], dur: 0.3 });
       audio.chord([196, 246.94, 293.66], 0.12, 0.08);
       await D.say('Lola Ising', 'Pagpalain ka ng Diyos, iho.');
       D.patak('Lola Ising', 'isang kilo ang naiuwi');
-      lola.look(null);
+      lola.reach('R', null, { rate: 3 }); lola.eyeUp = 0;
+      lola.set({ spine: [16, 0, 0], chest: [6, 0, 0], neck: [-4, 0, 0] });
       // she walks off under the street lamp with it
       lola.expression({});
       E.dof({ target: lola.head, aperture: 0.003 });
