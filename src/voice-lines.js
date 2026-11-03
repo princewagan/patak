@@ -27,6 +27,13 @@ const LINES = [
   // car: these were in the old car scene. Part Three is now Sir alone, so nothing says them yet.
   ['17-prince', 'Prince', "Sayang 'yung gas."],
   ['18-keira', 'Keira', 'Baba muna tayo?'],
+  // labas (Part Three, outside in the flood)
+  ['19-kapitbahay', 'Kapitbahay', "Kawawa naman 'yung driver."],
+  ['20-kapitbahay', 'Kapitbahay', "Hindi niya nailabas 'yung jeep. Hindi niya kasi alam."],
+  ['21-ikaw', 'Ikaw', 'Lagi po bang bumabaha rito?'],
+  ['22-ate', 'Ate', "Madalas. Pero ito na 'yung pinakamalala."],
+  ['23-ikaw', 'Ikaw', 'Bakit po walang madaanan palabas?'],
+  ['24-ate', 'Ate', "Mataas kasi 'yung gitna ng village. Lahat ng labasan, pababa."],
 ];
 
 const MAP = new Map(LINES.map(([f, who, text]) => [`${who}|${text}`, V(f)]));
