@@ -3,6 +3,7 @@ import { pbr, std, glow, box, cyl, at, sign, canvasTex, envFrom, blob, beam, hal
 import { Person } from '../engine/person.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
+import { cast } from '../engine/cast.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 import { makeStreet, Traffic } from './street.js';
 import { makePhone } from './phone.js';
@@ -28,7 +29,7 @@ function envelope(text, big = false) {
 
 export default {
   dof: { focus: 1.2, aperture: 0.0035, maxblur: 0.007 },
-  grade: { lift: [0.0, 0.016, 0.026], gain: [0.8, 0.98, 1.1], sat: 1.1, grain: 0.07, bloom: 0.42, bloomThreshold: 0.82, exposure: 0.5, vignette: 1.2, black: 0.035, gamma: 1.22, curve: 0.5 },
+  grade: { lift: [0.0, 0.016, 0.026], gain: [0.8, 0.98, 1.1], sat: 1.1, grain: 0.07, bloom: 0.34, bloomThreshold: 0.86, exposure: 0.68, vignette: 1.05, black: 0.02, gamma: 1.3, curve: 0.5 },
 
   async build(engine) {
     const S = this.scene = new THREE.Scene();
@@ -43,6 +44,8 @@ export default {
     const tubeL = []; for (const z of [-0.9, 0.9]) { const l = new THREE.PointLight(0xdcebff, 1.1, 3.4, 2); l.position.set(0, 1.36, z); S.add(l); tubeL.push(l); }
     tubeL[1].castShadow = true; tubeL[1].shadow.mapSize.set(1024, 1024); tubeL[1].shadow.bias = -0.002; tubeL[1].shadow.radius = 4;
     this.tubeL = tubeL;
+    // low along the aisle, so the boy at everyone's feet can actually be seen; it dims with the tubes for his silhouette
+    this.aisle = [[0, 0.75, 1.5], [0, 0.75, -0.4]].map(([x, y, z]) => { const l = new THREE.PointLight(0xd6e4f5, 1.5, 4.2, 1.5); l.position.set(x, y, z); S.add(l); return l; });
     // passing street lamps (sweep through the windows)
     this.sweep = [new THREE.PointLight(0xffa04a, 0, 7, 1.6), new THREE.PointLight(0xfff0d0, 0, 7, 1.6)];
     this.sweep[0].position.set(2.6, 2.4, -8); this.sweep[1].position.set(-3.2, 0.6, -8); S.add(...this.sweep);
@@ -144,7 +147,7 @@ export default {
     for (const p of [this.l1, this.l2, this.l3, this.l4, this.l5, this.ale, this.r3, this.r4, this.r5]) {
       const e = envelope(false); e.rotation.x = -PI / 2; e.position.set(0, 0.5, 0.25); e.visible = false; p.root.add(e); this.laps.push(e);
     }
-    this.myEnv = envelope(true); this.myEnv.rotation.set(-PI / 2 + 0.35, 0, PI); this.myEnv.position.set(0, 0.52, 0.27); this.myEnv.visible = false; you.root.add(this.myEnv);
+    this.myEnv = envelope(true); this.myEnv.material.color.setScalar(0.4); /* keeps the writing readable under the aisle light */ this.myEnv.rotation.set(-PI / 2 + 0.35, 0, PI); this.myEnv.position.set(0, 0.52, 0.27); this.myEnv.visible = false; you.root.add(this.myEnv);
     this.coin = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.003, 20), new THREE.MeshStandardMaterial({ color: 0xd8c27a, metalness: 1, roughness: 0.3 }));
     this.coin.visible = false; this.held.add(this.coin); this.coin.position.set(0.02, -0.16, -0.3); this.coin.rotation.set(1.2, 0, 0.3);
 
@@ -181,10 +184,10 @@ export default {
     this.engine = engine;
     engine.rig.shake = 0.7; engine.rig.jolt = 1; engine.rig.pov = 1;
     engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.2], fov: 50 });
-    audio.rain(0.8, 0.35); audio.roof(0.7); audio.engine(1, 1); audio.traffic(0.6);
+    audio.rain(0.8, 0.35); audio.roof(0.7); audio.engine(1, 1); audio.traffic(0.6); audio.scape('jeep');
     prewarm(engine);
   },
-  exit() { audio.layer('roof', 0); audio.layer('engine', 0); audio.layer('traffic', 0); },
+  exit() { audio.layer('roof', 0); audio.layer('engine', 0); audio.layer('traffic', 0); audio.scape(null); },
 
   update(dt, t) {
     this.speed += (this.targetSpeed - this.speed) * (1 - Math.exp(-0.8 * dt));
@@ -200,6 +203,7 @@ export default {
     this.sweep[1].position.z = -9 + ph2 * 18; this.sweep[1].intensity = this.speed > 0.5 ? 4 * Math.sin(ph2 * PI) : 0;
     // fluorescent flicker
     const fl = Math.random() < 0.012 ? 0.4 : 1; this.tubeL.forEach(l => { const d = l.userData.dim ?? 1; l.userData.k = (l.userData.k ?? 1) + (d - (l.userData.k ?? 1)) * 0.05; l.intensity = 1.1 * fl * l.userData.k; });
+    this.aisle.forEach(l => { l.intensity = 1.5 * (this.tubeL[0].userData.k ?? 1); });
     this.rain.update(t, this.engine.camera);
     this.beams.forEach(b => b.userData.tick(t));
     const dp = this.drips.geometry.attributes.position;
@@ -272,6 +276,8 @@ export default {
   /** boy climbs in at the back */
   async board(D) {
     const boy = this.boy;
+    audio.coinTap(); cast(D).bark(this.l3, 'Para po!');
+    await D.wait(1.1);
     this.targetSpeed = 0; audio.engine(1, 0.3);
     await D.wait(1.6);
     this.cam([0.62, 1.13, 1.32], [-0.1, 0.55, 2.6], 2.6, 48);
@@ -335,6 +341,7 @@ export default {
     const boy = this.boy;
     animate(k => this.silhouette(0.12 + 0.88 * k), 2.5);
     this.tubeL.forEach(l => (l.userData.dim = 1));
+    audio.roofBang();
     const e0 = this.grade.exposure; animate(k => { this.rim.intensity = 2.2 * (1 - k); this.hemi.intensity = 0.035 + 0.315 * k; this.sky.intensity = 0.08 + 0.47 * k; this.scene.environmentIntensity = 0.027 + 0.153 * k; this.engine.renderer.toneMappingExposure = e0 * (0.78 + 0.22 * k); this.follow.position.z = 6.5 + 6 * k; }, 2);
     this.targetSpeed = 0; audio.engine(1, 0.3);
     boy.pose('stand'); boy.look(null); boy.expression({});
@@ -352,10 +359,18 @@ export default {
     this.resetBoy();
     await D.black(false, 2.0);
     await D.wait(0.8);
+    const C = cast(D); C.people({ Ale: this.ale, Totoy: boy });
     await this.textMessage(D);
 
+    C.bark(this.l1, 'Bayad po.'); audio.barya();
+    await D.wait(1.5);
+    C.bark(this.l2, 'Makikiabot po.'); audio.barya();
+    await D.wait(1.7);
+    C.bark(this.l1, 'Isa pong Cubao.');
+    await D.wait(1.5);
     await this.board(D);
     boy.pose('crouch'); boy.root.rotation.y = -PI / 2; boy.look(this.l1.head, 0.6);
+    C.intro('Totoy', 'Araw-araw siyang nandito sa rutang ito.');
     await D.say('', 'May batang sumakay. Walang tsinelas, basang-basa.');
     this.wipeAnim(boy);
     this.engine.dof({ target: boy.head, aperture: 0.004 });
@@ -374,6 +389,7 @@ export default {
     this.ale.look(new THREE.Vector3(0.7, 1.1, 1.3), 1); this.ale.set({ spine: [0, -12, 0] });
     this.engine.dof({ target: this.ale.head, aperture: 0.003 });
     await this.cam([0.66, 1.13, 1.3], [0.62, 1.02, 0.5], 1.8, 44);
+    this.ale.expression({ worry: 0.7, sad: 0.3 });
     await D.say('Ale', "'Wag mong bigyan. Sindikato 'yan.");
     this.ale.set({ spine: [0, 0, 0] }); this.ale.look(null);
     this.engine.dof({ focus: 0.75, aperture: 0.004 });
@@ -395,7 +411,7 @@ export default {
       await D.wait(1.2);
       boy.set({ neck: [-14, 0, 0] }); boy.look(new THREE.Vector3(0.7, 1.12, 1.3), 1); boy.expression({ smile: 1 });
       boy.anim = (t, q) => { q.hips.position.y += Math.max(0, Math.sin(t * 7)) * 0.012; };
-      await D.say('Bata', 'Salamat po, kuya.');
+      await D.say('Totoy', 'Salamat po, kuya.');
       boy.anim = null;
       D.patak('Totoy', 'napangiti');
     } else {
@@ -415,6 +431,8 @@ export default {
     this.resetBoy(); this.offset += 40;
     this.engine.rig.set({ pos: [0.66, 1.13, 1.3], look: [-1, 0.98, 1.1], fov: 50 });
     await D.black(false, 1.2);
+    cast(D).bark(this.l1, 'Bayad po.'); audio.barya();
+    await D.wait(1.6);
     await this.board(D);
     this.myEnv.visible = false;
     await this.atYourFeet(D, false);
