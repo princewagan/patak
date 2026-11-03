@@ -29,9 +29,9 @@ function geo(m) {
   return g;
 }
 
-function statusBar(c, w, ink = '#eef1f5') {
+function statusBar(c, w, ink = '#eef1f5', time = '6:42') {
   c.fillStyle = ink; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
-  c.font = `600 54px ${UI}`; c.fillText('6:42', 76, 88);
+  c.font = `600 54px ${UI}`; c.fillText(time, 76, 88);
   c.fillStyle = '#000'; c.beginPath(); c.arc(w / 2, 62, 25, 0, 7); c.fill();
   c.fillStyle = ink;
   for (let i = 0; i < 4; i++) { c.globalAlpha = i < 3 ? 1 : 0.35; c.beginPath(); c.roundRect(w - 262 + i * 19, 86 - (i + 1) * 11, 13, (i + 1) * 11, 3); c.fill(); }
@@ -120,9 +120,23 @@ export function chatScreen(c, w, h) {
 }
 
 /** the phone on the bed at night */
+/** the same alarm the next morning, ringing */
+export function ringScreen(c, w, h) {
+  c.fillStyle = '#10151e'; c.fillRect(0, 0, w, h);
+  statusBar(c, w, '#eef1f5', '5:30');
+  c.fillStyle = '#eef1f5'; c.textAlign = 'center';
+  c.font = `500 66px ${UI}`; c.fillText('Alarm', w / 2, 400);
+  c.font = `300 300px ${UI}`; c.fillText('5:30', w / 2, 680);
+  c.font = `500 66px ${UI}`; c.fillText('Martes', w / 2, 790);
+  c.fillStyle = '#f2a33a'; c.beginPath(); c.arc(w / 2, 1130, 118, 0, 7); c.fill();
+  c.fillStyle = '#10151e'; c.font = `600 62px ${UI}`; c.fillText('Stop', w / 2, 1152);
+  c.textAlign = 'left';
+  c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.roundRect(w / 2 - 150, h - 44, 300, 11, 6); c.fill();
+}
+
 export function alarmScreen(c, w, h) {
   c.fillStyle = '#06080c'; c.fillRect(0, 0, w, h);
-  statusBar(c, w);
+  statusBar(c, w, '#eef1f5', '10:05');
   c.fillStyle = '#eef1f5'; c.textAlign = 'center';
   c.font = `300 270px ${UI}`; c.fillText('10:05', w / 2, 640);
   c.font = `500 66px ${UI}`; c.fillText('Martes', w / 2, 750);

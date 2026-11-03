@@ -12,3 +12,50 @@
 .bark { position: absolute; left: 0; top: 0; z-index: 5; padding: calc(var(--u) * .2) calc(var(--u) * .75) calc(var(--u) * .16); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 1.8); line-height: 1.1; color: #fff; background: rgba(5, 8, 11, .88); border: 2px solid #fff; white-space: nowrap; opacity: 0; transition: opacity .16s; pointer-events: none; will-change: transform; }
 .bark.on { opacity: 1; }
 #who::before { content: ''; position: absolute; z-index: -1; left: 0; top: calc(var(--u) * -.8); bottom: calc(var(--u) * -.8); width: calc(100% + var(--u) * 8); background: linear-gradient(90deg, rgba(0, 0, 0, .72) 0%, rgba(0, 0, 0, .5) 62%, rgba(0, 0, 0, 0) 100%); }
+
+/* ---------- the opening morning: type that lands, over the real room ---------- */
+#ihud { position: absolute; inset: 0; z-index: 5; pointer-events: none; transition: opacity .7s ease; }
+#ihud.out { opacity: 0; }
+
+/* IKAW: same two slanted plates as the main menu */
+#ihud .name { position: absolute; left: calc(var(--u) * 5.2); top: calc(var(--bar) + var(--u) * 5); opacity: 0; }
+#ihud .name.on { opacity: 1; animation: nameslam .42s cubic-bezier(.12, 1.1, .3, 1) both; }
+#ihud .name.off { opacity: 1; animation: namegone .34s ease-in both; }
+#ihud .name b { position: relative; isolation: isolate; display: inline-block; padding: calc(var(--u) * .5) calc(var(--u) * 2.4) calc(var(--u) * .1); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 12.5); line-height: .95; letter-spacing: -.012em; color: #05080b; transform: skewX(-9deg); }
+#ihud .name b::before { content: ''; position: absolute; inset: 0; z-index: -1; background: #fff; clip-path: polygon(calc(var(--u) * 1.5) 0, 100% 0, 100% calc(100% - var(--u) * 1), calc(100% - var(--u) * 1) 100%, 0 100%); }
+#ihud .name b::after { content: ''; position: absolute; z-index: -2; left: calc(var(--u) * -1); right: calc(var(--u) * .7); top: calc(var(--u) * .7); bottom: calc(var(--u) * -.55); background: var(--hot); clip-path: polygon(0 18%, 100% 0, 96% 100%, calc(var(--u) * 1.8) 90%); }
+#ihud .name span { display: block; width: max-content; margin-top: calc(var(--u) * 1.2); padding: calc(var(--u) * .34) calc(var(--u) * 1) calc(var(--u) * .3); font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.5); line-height: 1.1; color: #fff; background: rgba(4, 7, 10, .88); transform: skewX(-9deg); }
+@keyframes nameslam { 0% { opacity: 0; transform: translateX(calc(var(--u) * -14)) scale(1.18); } 100% { opacity: 1; transform: none; } }
+@keyframes namegone { to { opacity: 0; transform: translateX(calc(var(--u) * -9)); } }
+
+/* CONTRACTUAL: a rubber stamp */
+#ihud .seal { position: absolute; right: calc(var(--u) * 6); top: calc(var(--bar) + var(--u) * 9); text-align: center; opacity: 0; }
+#ihud .seal.on { opacity: 1; animation: sealdown .24s cubic-bezier(.3, 0, .3, 1) both; }
+#ihud .seal.off { opacity: 1; animation: sealgone .3s ease-in both; }
+#ihud .seal b { display: inline-block; padding: calc(var(--u) * .5) calc(var(--u) * 1.5) calc(var(--u) * .34); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 6.6); line-height: 1; color: #ff5a4c; border: calc(var(--u) * .4) solid #ff5a4c; background: rgba(8, 4, 4, .62); text-transform: uppercase; transform: rotate(-5deg); }
+#ihud .seal span { display: block; width: max-content; max-width: calc(var(--u) * 34); margin: calc(var(--u) * 1.6) auto 0; font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.4); line-height: 1.14; color: #fff; text-shadow: 0 0 calc(var(--u) * .7) #000, 0 0 calc(var(--u) * .2) #000; }
+@keyframes sealdown { 0% { opacity: 0; transform: scale(2.3); } 72% { opacity: 1; transform: scale(.96); } 100% { opacity: 1; transform: none; } }
+@keyframes sealgone { to { opacity: 0; transform: scale(.92); } }
+
+/* the money */
+#ihud .cash { position: absolute; right: calc(var(--u) * 6); top: calc(var(--bar) + var(--u) * 2.2); text-align: right; opacity: 0; transform: translateY(calc(var(--u) * 1)); transition: opacity .3s, transform .4s cubic-bezier(.16, .9, .24, 1); text-shadow: 0 0 calc(var(--u) * 1.1) rgba(0, 0, 0, .85); }
+#ihud .cash.on { opacity: 1; transform: none; }
+#ihud .cash small { display: block; font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.1); color: var(--hot); }
+#ihud .cash b { display: block; font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 11); line-height: 1; letter-spacing: -.012em; color: #fff; transform-origin: 100% 50%; }
+#ihud .cash b.bump { animation: cashbump .32s cubic-bezier(.16, 1.2, .3, 1); }
+@keyframes cashbump { 0% { transform: scale(1.22); } 100% { transform: none; } }
+
+/* the days until payday */
+#ihud .week { position: absolute; left: calc(var(--u) * 5.2); bottom: calc(var(--bar) + var(--u) * 2.4); opacity: 0; transition: opacity .25s; }
+#ihud .week.on { opacity: 1; }
+#ihud .days { display: flex; gap: calc(var(--u) * .5); }
+#ihud .day { width: calc(var(--u) * 9.4); padding: calc(var(--u) * .5) calc(var(--u) * .7) calc(var(--u) * .44); background: rgba(4, 7, 10, .84); border-bottom: calc(var(--u) * .3) solid rgba(255, 255, 255, .28); opacity: 0; transform: translateY(calc(var(--u) * 1.8)) skewX(-9deg); transition: opacity .16s, transform .26s cubic-bezier(.16, 1.1, .3, 1); }
+#ihud .day.in { opacity: 1; transform: skewX(-9deg); }
+#ihud .day b { display: block; font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 3.3); line-height: 1; color: #fff; }
+#ihud .day i { display: block; min-height: 1.2em; margin-top: calc(var(--u) * .16); font-family: var(--hud); font-style: normal; font-weight: 600; font-size: calc(var(--u) * 1.65); line-height: 1.2; color: rgba(255, 255, 255, .7); }
+#ihud .day.now { border-bottom-color: var(--hot); }
+#ihud .day.now i { color: var(--hot); }
+#ihud .day.pay { background: #fff; border-bottom-color: var(--hot); }
+#ihud .day.pay b, #ihud .day.pay i { color: #05080b; }
+#ihud .week > span { display: block; margin-top: calc(var(--u) * 1); font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.5); line-height: 1.1; color: #fff; text-shadow: 0 0 calc(var(--u) * .7) #000; opacity: 0; transition: opacity .3s; }
+#ihud .week.noted > span { opacity: 1; }

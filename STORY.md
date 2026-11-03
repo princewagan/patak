@@ -21,10 +21,7 @@ means relief or a smile, "ganyan talaga" means they look away, sign, or walk off
 ## PART ONE: IKAW (you)
 First-person. Sir never sees "himself." He *is* the character. An invented but ordinary Filipino day.
 
-**Character card**
-> IKAW · 22 · Service crew sa isang fast food sa Cubao
-> Contractual. Sa susunod na linggo malalaman kung ire-renew ka.
-> ₱160 sa wallet. Biyernes pa ang sahod. Martes ngayon.
+**Opening: Martes, 5:30 AM, your room.** The alarm goes off. The camera finds your crew shirt on the wall: IKAW, 22, service crew in Cubao, and a CONTRACTUAL stamp (renewal is decided next week). Then ₱100, ₱50 and ₱10 land on the bed as the wallet counts up to ₱160, and the days run from Tuesday to Friday's payday. You count what's left in this same room that night.
 
 Every choice costs him something real. Helping is never free here. The "no" option always carries the reason a real person would give ("Sindikato naman 'yan"), because in real life nobody picks "ignore." We justify it.
 

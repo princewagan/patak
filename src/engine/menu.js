@@ -45,7 +45,12 @@ export class Menu {
       b.onclick = () => this.go(key);
       list.appendChild(b);
     });
-    $('#menuBack').onclick = () => { if (this.started) this.showScenes(false); else this.close(); };
+    $('#menuBack').onclick = () => { audio.uiBack(); if (this.started) this.showScenes(false); else this.close(); };
+    // every button in the menu ticks when you move to it and answers when you press it
+    this.el.addEventListener('focusin', e => { if (e.target.matches('button') && !this.silent) audio.tick(); });
+    this.el.addEventListener('mouseover', e => { const b = e.target.closest('button'); if (b && document.activeElement !== b) b.focus({ preventScroll: true }); });
+    box.addEventListener('click', e => { if (e.target.closest('[data-id=resume]')) return; if (e.target.closest('button')) audio.uiSelect(); });
+    list.addEventListener('click', e => { if (e.target.closest('button')) audio.uiSelect(); });
     $('#pausebtn').onclick = () => this.toggle();
     addEventListener('mousemove', () => this.wake());
     document.addEventListener('fullscreenchange', () => {
@@ -68,15 +73,19 @@ export class Menu {
   toggle() { if (!this.started) return; this.open ? this.close() : this.show(); }
 
   show() {
+    clearTimeout(this._leave); this.el.classList.remove('leaving');
     this.open = true; this.D.pause(true); this.showScenes(false);
     this.el.classList.add('on');
+    audio.uiOpen();
     this.refresh();
-    $('#menuItems button').focus({ preventScroll: true });
+    this.silent = true; $('#menuItems button').focus({ preventScroll: true }); this.silent = false;
   }
 
   close() {
-    this.open = false; this.el.classList.remove('on', 'scenes', 'scenesonly');
-    if (!this.started) { document.querySelector('#scenesBtn')?.focus({ preventScroll: true }); return; }
+    this.open = false; this.el.classList.add('leaving');
+    audio.uiClose();
+    clearTimeout(this._leave); this._leave = setTimeout(() => this.el.classList.remove('on', 'scenes', 'scenesonly', 'leaving'), 230);
+    if (!this.started) { this.silent = true; document.querySelector('#scenesBtn')?.focus({ preventScroll: true }); this.silent = false; return; }
     this.D.pause(false);
     if (this.wasFull) { this.wasFull = false; this.fullscreen(true); }
   }
@@ -84,11 +93,11 @@ export class Menu {
   showScenes(on) {
     this.el.classList.toggle('scenes', on);
     document.querySelectorAll('#sceneItems .scene').forEach(b => b.classList.toggle('now', b.dataset.key === this.D.chapter));
-    if (on) $('#sceneItems button').focus({ preventScroll: true });
+    if (on) { this.silent = true; $('#sceneItems button').focus({ preventScroll: true }); this.silent = false; }
   }
 
   /** title screen: the scene list on its own */
-  titleScenes() { this.open = true; this.el.classList.add('on', 'scenes', 'scenesonly'); $('#sceneItems button').focus({ preventScroll: true }); }
+  titleScenes() { clearTimeout(this._leave); this.el.classList.remove('leaving'); this.open = true; audio.uiOpen(); this.el.classList.add('on', 'scenes', 'scenesonly'); this.silent = true; $('#sceneItems button').focus({ preventScroll: true }); }
 
   fullscreen(force) {
     this.fsMine = true;

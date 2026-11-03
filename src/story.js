@@ -82,7 +82,8 @@ function chapters(engine, D, S) {
     async intro() {
       await D.black(true, 0.01);
       audio.rain(0.35, 0.8);
-      await D.lines([{ t: 'Hango sa mga nangyayari araw-araw.', cls: 'small', hold: 3 }]);
+      await D.lines([{ t: 'Hango sa mga nangyayari araw-araw.', cls: 'small', hold: 2.4 }]);
+      if (has('gabi') && SCENES.gabi.morning) { await show('gabi'); return SCENES.gabi.morning(D, S); }
       await D.charCard('IKAW', [
         '22 · Service crew sa isang fast food sa Cubao',
         'Contractual. Sa susunod na linggo malalaman kung ire-renew ka.',

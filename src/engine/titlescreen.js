@@ -54,6 +54,8 @@ void main(){
 
   /* ground plane: everything below the vanishing point, squashed with distance */
   float hz = .563, gy = max(.012, hz - u.y), z = 1. / gy;
+  /* the far end of the street: the water calms and fades out here, so nothing gets painted on the walls behind it */
+  w *= smoothstep(.006, .06, hz - u.y);
   vec2 g = vec2((u.x - .4) * z, z * 1.15);
   vec2 g2 = vec2(g.x * .85, g.y * 1.9);
   float e = .055;
@@ -86,7 +88,7 @@ void main(){
   c += abs(dropWave) * vec3(.18, .26, .32);
 
   /* far-end haze so the jeep sits in the rain */
-  float fog = smoothstep(.13, 0., abs(u.y - .555)) * smoothstep(.19, .5, u.x) * .1;
+  float fog = smoothstep(.16, 0., abs(u.y - .57)) * .07;
   c = mix(c, vec3(.3, .4, .5), fog);
 
   /* lightning lifts the whole picture */
@@ -143,7 +145,7 @@ const CREDITS = [
 ];
 
 const BLURBS = {
-  start: 'Martes pa lang. ₱160 na lang hanggang Biyernes.',
+  start: '',
   scenesBtn: 'Pumili kung saan magsisimula.',
   soundBtn: 'Mas buo ang kuwento kapag malakas ang tunog.',
   fullBtn: 'Buong screen.',
@@ -191,22 +193,23 @@ export function titleScreen(canvas) {
     items.forEach(i => i.classList.toggle('sel', i === b));
     blurb.textContent = BLURBS[b.id] || '';
   };
+  let quiet = false;   // moving focus by code should not tick
   items.forEach(b => {
-    b.addEventListener('mouseenter', () => { if (!b.disabled) { b.focus({ preventScroll: true }); } });
-    b.addEventListener('focus', () => { describe(b); audio.tick(); });
+    b.addEventListener('mouseenter', () => { if (!b.disabled && document.activeElement !== b) b.focus({ preventScroll: true }); });
+    b.addEventListener('focus', () => { describe(b); if (!quiet) audio.tick(); });
   });
 
   const openMenu = () => {
     gate = false; title.classList.remove('gate'); title.classList.add('menuon');
-    if (!start.disabled) start.focus({ preventScroll: true });
+    quiet = true; if (!start.disabled) start.focus({ preventScroll: true }); quiet = false;
     describe(start);
   };
 
   /* any key or click on the gate: this first gesture is also what browsers need before they allow sound */
   const leaveGate = () => {
     if (!gate) return;
-    audio.unlock(); audio.titleBed(1); audio.confirm();
-    drop = [.3, .2, 0]; nextDrop = 7;
+    audio.unlock(); audio.titleBed(1); audio.gateOpen();
+    drop = [.3, .2, 0]; nextDrop = 7; nextFlash = 5;
     openMenu();
   };
   addEventListener('pointerdown', () => { if (gate) leaveGate(); }, true);
@@ -217,7 +220,7 @@ export function titleScreen(canvas) {
       e.preventDefault(); e.stopPropagation(); leaveGate(); return;
     }
     if (window.__patak?.D?.menu?.open) return;
-    if ($('#credits').classList.contains('on')) {
+    if (creditsOpen) {
       if (['Escape', 'Enter', ' ', 'Backspace'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); closeCredits(); }
       return;
     }
@@ -231,13 +234,18 @@ export function titleScreen(canvas) {
 
   /* the three options the main menu handles by itself (main.js wires Simulan and Mga Eksena) */
   const showSound = () => { const t = `Tunog: ${audio.muted ? 'Sarado' : 'Bukas'}`; if (sound.textContent !== t) sound.textContent = t; };
-  sound.addEventListener('click', () => { audio.unlock(); audio.toggleMute(); window.__patak?.D?.menu?.refresh(); showSound(); });
-  full.addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); });
-  const closeCredits = () => { $('#credits').classList.remove('on'); creditsBtn.focus({ preventScroll: true }); };
-  creditsBtn.addEventListener('click', () => { audio.confirm(); $('#credits').classList.add('on'); });
+  sound.addEventListener('click', () => { audio.unlock(); audio.toggleMute(); audio.uiToggle(); window.__patak?.D?.menu?.refresh(); showSound(); });
+  full.addEventListener('click', () => { audio.uiToggle(); if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); });
+  let creditsOpen = false;
+  const closeCredits = () => {
+    creditsOpen = false; audio.uiClose();
+    const c = $('#credits'); c.classList.add('leaving');
+    setTimeout(() => c.classList.remove('on', 'leaving'), 260);
+    quiet = true; creditsBtn.focus({ preventScroll: true }); quiet = false;
+  };
+  creditsBtn.addEventListener('click', () => { creditsOpen = true; audio.uiOpen(); $('#credits').classList.add('on'); });
   $('#creditsBack').addEventListener('click', closeCredits);
   start.addEventListener('click', () => audio.confirm());
-  scenes.addEventListener('click', () => audio.tick());
 
   /* ---------- frame ---------- */
   let last = performance.now(), T = 0;
@@ -245,6 +253,7 @@ export function titleScreen(canvas) {
     if (title.classList.contains('gone')) { audio.titleBed(0); setTimeout(() => { canvas.width = canvas.height = 1; }, 2000); return; }
     const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
     showSound();
+    title.classList.toggle('under', creditsOpen || !!window.__patak?.D?.menu?.open);   // something is open on top of the menu
 
     if (!shown) {
       // load first, so the heavy scene building never stutters the menu

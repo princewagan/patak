@@ -230,12 +230,63 @@ export class Audio {
     } else this.layer(name, level);
   }
 
+  // ---------- interface: water sounds, on their own context ----------
+  /* The game's context is suspended while paused, and the menu still has to answer, so UI sound lives apart from it. */
+  _ui() {
+    if (this.uiC) return this.uiC;
+    const c = this.uiC = new (window.AudioContext || window.webkitAudioContext)();
+    this.uiOut = c.createGain(); this.uiOut.connect(c.destination);
+    this.uiNoise = c.createBuffer(1, c.sampleRate, c.sampleRate);
+    const d = this.uiNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return c;
+  }
+  /* a bubble: a sine sweeping in pitch is what makes a sound read as water */
+  _bub(f0, f1, d, vol, delay = 0) {
+    if (!this.ctx || this.muted) return;
+    const c = this._ui(), t = c.currentTime + delay, o = c.createOscillator(), g = c.createGain();
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .005); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(this.uiOut); o.start(t); o.stop(t + d + .03);
+  }
+  /* air moving: a band of noise sliding from one pitch to another */
+  _air(f0, f1, d, vol, delay = 0) {
+    if (!this.ctx || this.muted) return;
+    const c = this._ui(), t = c.currentTime + delay, s = c.createBufferSource(), b = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = this.uiNoise; s.loop = true; b.type = 'bandpass'; b.Q.value = .9;
+    b.frequency.setValueAtTime(f0, t); b.frequency.exponentialRampToValueAtTime(f1, t + d);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + d * .45); g.gain.linearRampToValueAtTime(0, t + d);
+    s.connect(b).connect(g).connect(this.uiOut); s.start(t); s.stop(t + d + .03);
+  }
+  tick() { this._bub(1250, 2100, .05, .075); }                                   // moving between options
+  uiSelect() { this._bub(520, 1150, .1, .17); this._bub(1100, 1900, .07, .08, .06); } // pressing one
+  uiBack() { this._bub(1000, 420, .13, .15); }                                    // going back
+  uiToggle() { this._bub(1500, 1420, .025, .09); this._bub(1000, 960, .03, .09, .055); } // a switch
+  uiOpen() { this._air(500, 2600, .34, .11); this._bub(380, 900, .17, .11, .1); }  // a panel rising in
+  uiClose() { this._air(2600, 500, .27, .1); this._bub(800, 340, .15, .1, .05); }  // a panel sinking away
+  gateOpen() { this._bub(420, 1400, .15, .22); this._bub(92, 42, .75, .5); this._air(300, 1900, .6, .1); } // leaving the press-any-key screen
+  confirm() { this._bub(1500, 420, .11, .22); this._bub(72, 34, 1.1, .6); this._air(3200, 280, .78, .17); } // Simulan, with the slash across the screen
+  choiceIn() { this._air(620, 2100, .3, .09); }                                    // a choice appearing
+
+  // ---------- the morning intro ----------
+  alarm() { // the phone going off on the mattress: buzz on foam, and a soft marimba alarm
+    if (!this.ctx) return;
+    for (let i = 0; i < 6; i++) { this.tone(158, .2, { type: 'square', vol: .03, delay: i * .52, lp: 900 }); this.tone(162, .2, { type: 'square', vol: .022, delay: i * .52 + .24, lp: 900 }); }
+    [[0, 659.25], [.26, 880], [.52, 659.25], [.78, 987.77], [1.3, 659.25], [1.56, 880], [1.82, 659.25], [2.08, 987.77]].forEach(([dl, f]) => { this.tone(f, .34, { vol: .05, delay: dl + .1 }); this.tone(f * 3.9, .1, { vol: .009, delay: dl + .1 }); });
+  }
+  slam() { this.tone(82, .38, { vol: .52, to: 44 }); this.noiseHit(.16, { f: 1500, q: .6, vol: .2 }); this.noiseHit(.5, { f: 620, q: .5, vol: .1, a: .01 }); } // big word hits the screen
+  stampHit() { this.tone(118, .16, { vol: .56, to: 66 }); this.noiseHit(.07, { f: 820, q: .8, vol: .34 }); this.noiseHit(.05, { f: 2600, q: 1.2, vol: .12, delay: .012 }); } // rubber stamp on paper
+  countUp() { this.tone(1320, .05, { vol: .035 }); this.tone(1980, .07, { vol: .02, delay: .03 }); }        // a number going up
+  dayTick() { this.tone(640, .07, { vol: .06, to: 520 }); this.noiseHit(.03, { f: 1800, q: 1.5, vol: .05 }); }  // one day on the calendar
+  dawn() { this.scape('umaga', .75); this.rooster(); }
+
   // ---------- main menu ----------
-  tick() { if (!this.ctx) return; this.tone(1900, .035, { vol: .035, to: 1100 }); this.noiseHit(.02, { f: 3400, q: 2, vol: .03 }); }
-  confirm() { if (!this.ctx) return; this.tone(1500, .09, { vol: .16, to: 420 }); this.tone(62, .55, { vol: .4, to: 38 }); this.noiseHit(.5, { f: 1200, q: .7, vol: .08, a: .01 }); }
   titleDrop() { if (!this.ctx) return; this.drop(); this.piano(this._dropNote(), 5, .07, .04); }
   _dropNote() { const n = [220, 261.63, 196, 164.81, 220, 293.66, 246.94, 196]; this._dn = ((this._dn ?? -1) + 1) % n.length; return n[this._dn]; }
-  titleThunder() { if (!this.ctx) return; this.noiseHit(3.4, { f: 120, type: 'lowpass', vol: .36, a: .32, delay: .5, buf: this.brown }); }
+  titleThunder() { // real thunder, kept down and softened so it sits behind the menu
+    if (!this.ctx) return;
+    const near = Math.random() < .5, delay = between(.35, 1.2);
+    if (!this.shot(near ? 'thunder1' : 'thunder2', { vol: near ? .2 : .17, lp: 2400, room: .22, pan: side(.4), delay })) this.noiseHit(3.4, { f: 120, type: 'lowpass', vol: .3, a: .32, delay, buf: this.brown });
+  }
   titleBed(on) {
     if (!this.ctx) return;
     if (on) { this.rain(.8, .08); this.drone(.55, [55, 82.41, 110, 164.81]); }

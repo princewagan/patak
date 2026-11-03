@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { phoneModel, alarmScreen } from './phone.js';
+import { phoneModel, alarmScreen, ringScreen } from './phone.js';
+import { IntroHud } from '../engine/introhud.js';
 import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom } from '../engine/kit.js';
 import { Rain } from '../engine/rain.js';
@@ -17,6 +18,24 @@ function coinsFor(amount) {
   const out = []; let a = Math.max(0, amount | 0);
   for (const v of [100, 50, 20, 10, 5, 1]) while (a >= v) { out.push(v); a -= v; }
   return out;
+}
+
+/* his work shirt, drawn flat: short sleeves, collar, buttons, name tag */
+function poloTex() {
+  return canvasTex(512, 620, (c, w, h) => {
+    const shape = () => { c.beginPath(); c.moveTo(190, 40); c.lineTo(96, 76); c.lineTo(10, 190); c.lineTo(86, 252); c.lineTo(124, 208); c.lineTo(120, 606); c.lineTo(392, 606); c.lineTo(388, 208); c.lineTo(426, 252); c.lineTo(502, 190); c.lineTo(416, 76); c.lineTo(322, 40); c.closePath(); };
+    c.fillStyle = '#b3262c'; shape(); c.fill();
+    c.save(); shape(); c.clip();
+    const g = c.createLinearGradient(0, 0, w, 0); g.addColorStop(0, 'rgba(0,0,0,.34)'); g.addColorStop(.3, 'rgba(0,0,0,0)'); g.addColorStop(.72, 'rgba(255,255,255,.05)'); g.addColorStop(1, 'rgba(0,0,0,.34)'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(40,0,4,.3)'; c.lineWidth = 7; c.lineCap = 'round';
+    for (const [a, b, e, f] of [[176, 250, 150, 590], [330, 300, 352, 596], [226, 400, 214, 600], [288, 450, 296, 600]]) { c.beginPath(); c.moveTo(a, b); c.quadraticCurveTo((a + e) / 2 + 14, (b + f) / 2, e, f); c.stroke(); }
+    c.strokeStyle = 'rgba(40,0,4,.45)'; c.lineWidth = 5; c.beginPath(); c.moveTo(124, 208); c.lineTo(104, 120); c.moveTo(388, 208); c.lineTo(408, 120); c.stroke();
+    c.restore();
+    c.fillStyle = '#e8c33e'; c.beginPath(); c.moveTo(190, 40); c.lineTo(256, 112); c.lineTo(322, 40); c.lineTo(296, 26); c.lineTo(256, 66); c.lineTo(216, 26); c.closePath(); c.fill();  // collar
+    c.fillStyle = 'rgba(70,6,10,.6)'; c.fillRect(250, 112, 12, 104);
+    c.fillStyle = '#efe6d4'; for (const y of [130, 168, 204]) { c.beginPath(); c.arc(256, y, 6, 0, 7); c.fill(); }
+    c.fillStyle = '#f4f1e8'; c.fillRect(306, 170, 74, 34); c.fillStyle = '#7a1417'; c.font = 'bold 22px Inter'; c.textAlign = 'center'; c.fillText('CREW', 343, 195);  // name tag
+  });
 }
 
 function billTex(v) {
@@ -112,11 +131,13 @@ export default {
     }
     // outside: neighbour's wall lit by a sodium lamp, rain
     const outWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), pbr('peeling_painted_wall', { repeat: [4, 2.4], color: 0x6d6a64, wet: 0.6 })); outWall.position.set(0.6, 2, -3.6); S.add(outWall);
-    const sodium = new THREE.PointLight(0xff9440, 7, 9, 1.5); sodium.position.set(1.9, 3.0, -2.6); S.add(sodium);
+    const sodium = this.sodium = new THREE.PointLight(0xff9440, 7, 9, 1.5); sodium.position.set(1.9, 3.0, -2.6); S.add(sodium);
     this.flash = new THREE.PointLight(0xcfe0ff, 0, 12, 1.2); this.flash.position.set(-1.0, 3.2, -3.0); S.add(this.flash);
     // light spilling in through the louvers onto the floor/mattress
-    const spill = new THREE.SpotLight(0xff9a50, 6, 6, 0.6, 0.7, 1.3); spill.position.set(wc + 0.2, 2.05, -RZ - 0.6); spill.target.position.set(-0.2, 0.1, 0.2); spill.castShadow = true; spill.shadow.mapSize.set(1024, 1024); S.add(spill, spill.target);
-    S.add(new THREE.HemisphereLight(0x2c3c5a, 0x0c0a08, 0.45));
+    const spill = this.spill = new THREE.SpotLight(0xff9a50, 6, 6, 0.6, 0.7, 1.3); spill.position.set(wc + 0.2, 2.05, -RZ - 0.6); spill.target.position.set(-0.2, 0.1, 0.2); spill.castShadow = true; spill.shadow.mapSize.set(1024, 1024); S.add(spill, spill.target);
+    S.add(this.hemi = new THREE.HemisphereLight(0x2c3c5a, 0x0c0a08, 0.45));
+    // grey morning light in the room; it's off at night
+    this.dawnL = new THREE.PointLight(0xdce6f4, 0, 5.5, 1.3); this.dawnL.position.set(-0.55, 1.85, 0.75); S.add(this.dawnL);
 
     // ---------- things in the room ----------
     // foam mattress on the floor with a sheet, pillow, thin blanket
@@ -148,12 +169,15 @@ export default {
     this.votiveL = new THREE.PointLight(0xff3a24, 0.5, 1.6, 2); this.votiveL.position.set(-1.1, 1.65, -1.05); S.add(this.votiveL);
     // crew polo on a hanger + cap on a nail (his job)
     const polo = new THREE.Group(); polo.position.set(-RX + 0.08, 1.55, 0.6); polo.rotation.y = PI / 2; S.add(polo);
-    polo.add(at(box(0.44, 0.58, 0.04, std(0x6b1c22, { rough: 0.9 }), 0.03), 0, -0.3, 0));
-    polo.add(at(box(0.16, 0.06, 0.042, std(0xe6c64a, { rough: 0.8 })), 0, -0.05, 0.002));
+    const shirt = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.8), new THREE.MeshStandardMaterial({ map: poloTex(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }));
+    shirt.position.set(0, -0.4, 0.012); polo.add(shirt);
     polo.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.006, 4, 24, PI), std(0x333333)), 0, -0.02, 0));
     // the phone and the money on the sheet
     const phone = phoneModel(alarmScreen, { gain: 0.9 });
     phone.position.set(-0.3, 0.115, 0.42); phone.rotation.set(-Math.PI / 2, 0, 0.35); S.add(phone);
+    this.nightPhone = phone;
+    const ring = this.dayPhone = phoneModel(ringScreen, { gain: 1.1 });
+    ring.position.copy(phone.position); ring.rotation.copy(phone.rotation); ring.visible = false; S.add(ring);
     const pl = new THREE.PointLight(0xb6c8ff, 0.12, 0.9, 2); pl.position.set(-0.3, 0.3, 0.42); S.add(pl);
     this.money = new THREE.Group(); S.add(this.money);
 
@@ -198,6 +222,67 @@ export default {
     for (const g of this.glass) g.userData.u.uTime.value = t;
     this.votiveL.intensity = 0.45 + Math.sin(t * 11) * 0.05 + Math.sin(t * 17.3) * 0.04;
     if (this.flash.intensity > 0) this.flash.intensity = Math.max(0, this.flash.intensity - dt * 40);
+  },
+
+  /** same room, grey before sunrise instead of orange streetlight */
+  setDawn(on) {
+    this.sodium.color.set(on ? 0xa9c4ea : 0xff9440); this.sodium.intensity = on ? 5 : 7;
+    this.spill.color.set(on ? 0xc6d8f0 : 0xff9a50); this.spill.intensity = on ? 11 : 6;
+    this.hemi.color.set(on ? 0x8fa2c0 : 0x2c3c5a); this.hemi.intensity = on ? 1.5 : 0.45;
+    this.dawnL.intensity = on ? 7 : 0;
+    this.nightPhone.visible = !on; this.dayPhone.visible = on;
+  },
+
+  /** The game opens here. Who you are is shown in your own room, and you count the same money you count again tonight. */
+  async morning(D, S) {
+    const E = this.engine, rig = E.rig, H = new IntroHud();
+    this.setDawn(true); this.layMoney(160);
+    audio.dawn(); audio.fan(0.45); audio.rain(0.28, 0.72);
+    rig.set({ pos: [-0.5, 1.02, 1.12], look: [-0.3, 0.12, 0.45], fov: 34 });
+    E.dof({ focus: 0.72, aperture: 0.004 });
+    audio.alarm();
+    await D.wait(1.0);
+    await D.black(false, 1.1);
+    D.stamp('<b>Martes, 5:30 AM</b>Kuwarto mo', 4);
+    await D.holdOrSkip(1.5);
+
+    // the uniform on the wall: this is who you are
+    E.dof({ focus: 1.1, aperture: 0.0022 });
+    rig.move({ pos: [-0.28, 1.2, 1.02], look: [-1.3, 1.2, 0.56], dur: 2.0, fov: 40, e: 'inOut' });
+    await D.wait(0.75);
+    H.name('IKAW', '22 · Service crew sa fast food sa Cubao'); audio.slam();
+    await D.holdOrSkip(2.5);
+    H.seal('Contractual', 'Sa susunod na linggo malalaman kung ire-renew ka.'); audio.stampHit();
+    await D.holdOrSkip(3.4);
+    H.nameOff(); H.sealOff();
+
+    // the bed: everything you have until payday
+    E.dof({ focus: 0.68, aperture: 0.004 });
+    await rig.move({ pos: [-0.46, 0.98, 1.04], look: [-0.34, 0.11, 0.6], dur: 1.5, fov: 40, e: 'inOut' });
+    const notes = this.money.children; let total = 0;
+    const vals = [100, 50, 10];
+    H.cash(0);
+    for (let i = 0; i < notes.length; i++) {
+      const m = notes[i], y = m.position.y, spin = m.rotation.z;
+      m.visible = true;
+      animate(k => { m.position.y = y + (1 - k) * 0.22; m.rotation.z = spin + (1 - k) * 0.8; }, 0.26, 'in');
+      await D.wait(0.24);
+      if (vals[i] >= 50) audio.paper(); else audio.coin();
+      total += vals[i]; H.cash(total); audio.countUp();
+      await D.wait(0.5);
+    }
+    await D.wait(0.2);
+
+    // and how long it has to last
+    H.week([['MAR', 'Ngayon', 'now'], ['MIY'], ['HUW'], ['BIY', 'Sahod', 'pay']], 'Tatlong araw pa. Pamasahe at pagkain mo na ’yan.');
+    for (let i = 0; i < 4; i++) { H.day(i); audio.dayTick(); await D.wait(0.3); }
+    H.note();
+    await D.holdOrSkip(3);
+    H.out();
+    await D.black(true, 1.1);
+    H.remove();
+    this.setDawn(false);
+    this.money.children.forEach(m => (m.visible = false));
   },
 
   async play(D, S) {

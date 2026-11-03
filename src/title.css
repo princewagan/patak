@@ -15,9 +15,14 @@
 @keyframes titlepulse { 50% { opacity: .45; } }
 
 /* ---------- press any key ---------- */
-#title .press { position: absolute; right: calc(var(--u) * 5.5); bottom: calc(var(--u) * 12); font-weight: 700; font-size: calc(var(--u) * 2.5); line-height: 1; color: #fff; text-transform: uppercase; opacity: 0; transition: opacity .4s; }
-#title.gate .press { opacity: 1; animation: titlepress 2.2s ease-in-out .9s infinite; }
-@keyframes titlepress { 50% { opacity: .35; } }
+#title .press { position: absolute; left: calc(var(--u) * 6); bottom: calc(var(--u) * 2.8); display: flex; align-items: center; gap: calc(var(--u) * .9); font-family: var(--text); font-weight: 500; font-size: calc(var(--u) * 1.45); line-height: 1; color: rgba(255, 255, 255, .82); text-shadow: 0 0 calc(var(--u) * .6) rgba(0, 0, 0, .8); opacity: 0; transition: opacity .9s ease 1.2s; }
+#title .press i { position: relative; display: block; width: calc(var(--u) * 1.5); height: calc(var(--u) * 1.5); }
+#title .press i::before, #title .press i::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--hot); opacity: 0; animation: titlering 2.6s ease-out infinite; }
+#title .press i::after { animation-delay: .34s; }
+@keyframes titlering { 0% { opacity: 0; transform: scale(.15); } 12% { opacity: .95; } 100% { opacity: 0; transform: scale(1.05); } }
+#title.gate .press { opacity: 1; animation: titlepress 2.6s ease-in-out 2s infinite; }
+#title.menuon .press { opacity: 0; transition: opacity .2s; }
+@keyframes titlepress { 50% { opacity: .55; } }
 
 /* ---------- the menu: a staggered, slanted stack ---------- */
 #title .actions { position: absolute; right: calc(var(--u) * 5.5); bottom: calc(var(--u) * 12.5); display: flex; flex-direction: column; align-items: flex-end; gap: calc(var(--u) * .55); }
@@ -46,14 +51,26 @@
 #title .foot .k span { display: flex; align-items: center; gap: calc(var(--u) * .5); }
 #title .foot b { display: grid; place-items: center; min-width: calc(var(--u) * 1.9); height: calc(var(--u) * 1.9); padding: 0 calc(var(--u) * .35); border: 1.5px solid rgba(255, 255, 255, .55); font-weight: 700; font-size: calc(var(--u) * 1.2); line-height: 1; }
 
+/* ---------- something opens on top: the menu slides away and the logo steps back, then they return ---------- */
+#title .logo { transition: opacity .5s ease, transform .7s cubic-bezier(.16, .8, .24, 1), filter .5s ease; }
+#title.under .logo { opacity: .16; transform: translateY(calc(var(--u) * -1.2)) scale(.97); filter: blur(calc(var(--u) * .16)); }
+#title.under .actions button { opacity: 0 !important; pointer-events: none !important; transform: translateX(calc(var(--u) * 7)) skewX(-9deg) !important; }
+#title.under .blurb, #title.under .foot { opacity: 0; transition: opacity .25s; }
+
 /* ---------- starting the game: a black slash wipes the menu off ---------- */
 #title .wipe { position: absolute; top: -10%; bottom: -10%; left: -35%; width: 170%; background: #000; transform: translateX(-108%) skewX(-14deg); pointer-events: none; z-index: 3; }
 #title.gone .wipe { transform: translateX(0) skewX(-14deg); transition: transform .62s cubic-bezier(.7, 0, .2, 1); }
 #title.gone .actions button { transform: translateX(calc(var(--u) * 12)) skewX(-9deg); opacity: 0; transition: transform .34s ease-in, opacity .3s; }
 
 /* ---------- credits ---------- */
-#credits { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; background: rgba(2, 4, 6, .86); backdrop-filter: blur(10px); pointer-events: auto; font-family: var(--text); }
-#credits.on { display: flex; }
+#credits { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; background: rgba(2, 4, 6, .8); pointer-events: auto; font-family: var(--text); }
+#credits.on { display: flex; animation: panelin .32s ease both; }
+#credits.leaving { animation: panelout .24s ease both; }
+#credits.on .box > * { animation: itemup .5s cubic-bezier(.16, .9, .24, 1) both; }
+#credits.on .box > :nth-child(2) { animation-delay: .05s; } #credits.on .box > :nth-child(3) { animation-delay: .1s; } #credits.on .box > :nth-child(4) { animation-delay: .15s; } #credits.on .box > :nth-child(5) { animation-delay: .22s; }
+@keyframes panelin { from { opacity: 0; } }
+@keyframes panelout { to { opacity: 0; } }
+@keyframes itemup { from { opacity: 0; transform: translateY(calc(var(--u) * 2.2)); } }
 #credits .box { width: min(calc(var(--u) * 66), 90vw); }
 #credits h2 { font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 4.2); line-height: 1; text-transform: uppercase; margin-bottom: calc(var(--u) * .4); }
 #credits .names { font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.3); color: #fff; margin-bottom: calc(var(--u) * 2); }
@@ -66,3 +83,20 @@
   #title.menuon .actions button.sel { font-size: 7vw; }
 }
 #credits p b { font-weight: 600; color: #fff; }
+
+/* ---------- the scene list and pause menu: they rise in, one row after another, and sink out ---------- */
+#menu.on { animation: panelin .3s ease both; }
+#menu.leaving { animation: panelout .22s ease both; pointer-events: none; }
+#menu.leaving .col { transform: translateY(calc(var(--u) * 1.4)); transition: transform .22s ease-in; }
+#menu.on .head, #menu.on #menuItems button, #menu.on #sceneItems button, #menu.on #menuBack, #menu.on .foot { animation: itemup .46s cubic-bezier(.16, .9, .24, 1) both; }
+#menu.on #menuItems button:nth-child(1), #menu.on #sceneItems button:nth-child(1) { animation-delay: .04s; }
+#menu.on #menuItems button:nth-child(2), #menu.on #sceneItems button:nth-child(2) { animation-delay: .07s; }
+#menu.on #menuItems button:nth-child(3), #menu.on #sceneItems button:nth-child(3) { animation-delay: .1s; }
+#menu.on #menuItems button:nth-child(4), #menu.on #sceneItems button:nth-child(4) { animation-delay: .13s; }
+#menu.on #menuItems button:nth-child(5), #menu.on #sceneItems button:nth-child(5) { animation-delay: .16s; }
+#menu.on #menuItems button:nth-child(6), #menu.on #sceneItems button:nth-child(6) { animation-delay: .19s; }
+#menu.on #sceneItems button:nth-child(7) { animation-delay: .22s; }
+#menu.on #sceneItems button:nth-child(8) { animation-delay: .25s; }
+#menu.on #sceneItems button:nth-child(9) { animation-delay: .28s; }
+#menu.on #sceneItems button:nth-child(10) { animation-delay: .31s; }
+#menu.on #menuBack { animation-delay: .36s; }

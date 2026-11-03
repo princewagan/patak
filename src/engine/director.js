@@ -142,12 +142,12 @@ export class Director {
       ring.style.strokeDashoffset = '0';
       needle.style.transform = 'rotate(0deg)';
       const aim = i => { needle.style.transform = `rotate(${i === 0 ? -118 : i === 1 ? 118 : 0}deg)`; l.classList.toggle('hl', i === 0); r.classList.toggle('hl', i === 1); };
-      l.onmouseenter = () => aim(0); r.onmouseenter = () => aim(1);
+      l.onmouseenter = () => { aim(0); audio.tick(); }; r.onmouseenter = () => { aim(1); audio.tick(); };
       l.onmouseleave = r.onmouseleave = () => aim(-1);
       el.classList.add('on');
       const prevScale = this.engine.timeScale;
       if (timer && slowmo) this.engine.timeScale = 0.35;
-      audio.whoosh();
+      audio.choiceIn();
       let hb, stopTimer, done = false;
       const finish = (i, timedOut = false) => {
         if (done) return; done = true;
@@ -156,7 +156,7 @@ export class Director {
         this.engine.timeScale = prevScale;
         el.classList.remove('urgent');
         const picked = i === 0 ? l : r, other = i === 0 ? r : l;
-        if (!timedOut) { aim(i); picked.classList.add('picked'); other.classList.add('dim'); audio.tone(660, .4, { vol: .06 }); }
+        if (!timedOut) { aim(i); picked.classList.add('picked'); other.classList.add('dim'); audio.uiSelect(); }
         else { aim(-1); el.classList.add('out'); l.classList.add('dim'); r.classList.add('dim'); audio.tone(110, .5, { vol: .1 }); }
         this.lastTimedOut = timedOut;
         if (id) this.state.choices[id] = timedOut ? 'timeout' : i;
@@ -196,10 +196,10 @@ export class Director {
           b.className = 'chip';
           b.innerHTML = `<span class="key">${k + 1}</span><span class="q">${q}</span>`;
           if (done.has(k)) b.classList.add('done');
-          b.onclick = () => res(k); box.appendChild(b);
+          b.onclick = () => { audio.uiSelect(); res(k); }; b.onmouseenter = () => audio.tick(); box.appendChild(b);
         });
         box.classList.add('on'); audio.whoosh();
-        this.askKeys = k => { if (k < questions.length && !done.has(k)) res(k); };
+        this.askKeys = k => { if (k < questions.length && !done.has(k)) { audio.uiSelect(); res(k); } };
         if (this.autopick != null) this.clock.after(1.5, () => res(questions.findIndex((q, k) => !done.has(k))));
       });
       this.askKeys = null;
