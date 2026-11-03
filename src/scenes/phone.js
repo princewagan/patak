@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { ell, rell, cone, blend, surfaceNets } from '../engine/sdfmesh.js';
 import { canvasTex } from '../engine/kit.js';
 import { animate } from '../engine/tween.js';
+import { phoneHand } from './phonehand.js';
 
 /*
   The phone in his right hand, first person. Model space: origin at the middle of the phone, +Y up the long side,
-  +Z out of the screen toward his eyes, +X to his right. Palm behind, fingers around the left edge, thumb over the lower right.
+  +Z out of the screen toward his eyes, +X to his right. The hand itself is in phonehand.js.
   The message sits in the top half on purpose so the hand never covers it. Type is the size people set on their parents' phones:
   it has to read from the back of a classroom.
 */
@@ -163,30 +163,6 @@ const screenShader = {
     }`,
 };
 
-function handMeshes() {
-  const P = [
-    [rell([0.012, -0.056, -0.0215], [0.041, 0.052, 0.0155], [0, 0, -0.25])],
-    [ell(-0.012, -0.094, -0.0235, 0.024, 0.032, 0.0165), 0.014],                    // heel of the hand, below the phone
-    [cone([0.03, -0.112, -0.026], [0.052, -0.07, -0.012], 0.021, 0.0145), 0.012],   // the thumb's muscle
-    [cone([0.008, -0.116, -0.032], [0.03, -0.185, -0.058], 0.0285, 0.0272, 0.72), 0.018],
-    [cone([0.03, -0.185, -0.058], [0.1, -0.44, -0.215], 0.0272, 0.042, 0.8), 0.012],
-  ];
-  // four fingers pressed together, slanting up round the left edge; only the tips separate
-  const tips = [];
-  [[-0.0225, 0.0094], [-0.0385, 0.0097], [-0.0545, 0.0092], [-0.0695, 0.0079]].forEach(([y, r], i) => {
-    const k = [0.022 - i * 0.004, y - 0.032, -0.0225], a = [-0.024, y - 0.017, -0.0158], b = [-0.0482, y - 0.0065, -0.0022], t = [-0.0392 - i * 0.0008, y + 0.0035, 0.0088];
-    P.push([cone(k, a, r * 1.04, r), 0.007], [cone(a, b, r, r * 0.96), 0.0045], [cone(b, t, r * 0.96, r * 0.72), 0.0016]);
-    tips.push({ t, r: r * 0.72, d: [t[0] - b[0], t[1] - b[1]] });
-  });
-  const hand = geo(surfaceNets(blend(P), [-0.064, -0.47, -0.28], [0.135, 0.03, 0.03], 0.0016, { smooth: 2 }));
-  // the thumb has its own pivot at the base so it can swipe
-  const O = new THREE.Vector3(0.05, -0.1, -0.016);
-  const J = [[0.05, -0.1, -0.016], [0.0595, -0.073, 0.0005], [0.0465, -0.052, 0.0132], [0.0265, -0.039, 0.0138]].map(p => [p[0] - O.x, p[1] - O.y, p[2] - O.z]);
-  const Th = [[cone(J[0], J[1], 0.0152, 0.0122)], [cone(J[1], J[2], 0.0122, 0.0102), 0.004], [cone(J[2], J[3], 0.0102, 0.0083), 0.003]];
-  const thumb = geo(surfaceNets(blend(Th), [-0.04, -0.02, -0.022], [0.03, 0.085, 0.05], 0.0013, { smooth: 2 }));
-  return { hand, thumb, O, tips, tip: new THREE.Vector3(...J[3]), dir: new THREE.Vector3(J[3][0] - J[2][0], J[3][1] - J[2][1], J[3][2] - J[2][2]).normalize() };
-}
-
 /** the handset alone: screen faces +Z. draw(c, w, h) paints a 1080-wide screen. */
 export function phoneModel(draw, { gain = 1.5, under = null } = {}) {
   const G = new THREE.Group();
@@ -210,23 +186,8 @@ export function phoneModel(draw, { gain = 1.5, under = null } = {}) {
 export function makePhone(scene) {
   const G = phoneModel(messagesScreen, { under: homeScreen }), U = G.screen; U.uOn.value = 0;
 
-  const skin = new THREE.MeshPhysicalMaterial({ color: 0x9a6a4a, roughness: 0.66, sheen: 0.12, sheenColor: new THREE.Color(0xff9a7a), sheenRoughness: 0.7 });
-  const { hand, thumb, O, tips, tip, dir } = handMeshes();
-  G.add(new THREE.Mesh(hand, skin));
-  const th = new THREE.Group(); th.position.copy(O); G.add(th);
-  th.add(new THREE.Mesh(thumb, skin));
-  const nail = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 10), new THREE.MeshStandardMaterial({ color: 0xb48a76, roughness: 0.34 }));
-  nail.scale.set(0.0058, 0.0072, 0.0012);
-  nail.position.copy(tip).addScaledVector(dir, 0.0014).add(new THREE.Vector3(0, 0, 0.0074));
-  nail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dir.x, dir.y, 0).normalize()); th.add(nail);
-
-  const fnail = new THREE.MeshStandardMaterial({ color: 0xb08672, roughness: 0.36 });
-  for (const f of tips) {
-    const n = new THREE.Mesh(nail.geometry, fnail), L = Math.hypot(f.d[0], f.d[1]);
-    n.scale.set(f.r * 0.72, f.r * 0.86, 0.0009);
-    n.position.set(f.t[0] + f.d[0] / L * f.r * 0.32, f.t[1] + f.d[1] / L * f.r * 0.32, f.t[2] + f.r * 0.8);
-    n.rotation.z = Math.atan2(-f.d[0], f.d[1]); G.add(n);
-  }
+  const { hand, thumb, ready } = phoneHand();
+  G.add(hand); G.handReady = ready;
 
   // the screen is the light in this shot: it falls on the thumb, the fingers and his shirt
   // it stays in the scene at zero: adding or removing a light recompiles every material and stalls the shot
@@ -244,10 +205,10 @@ export function makePhone(scene) {
   };
   /** the thumb reaches in and drags the conversation away to the right */
   G.swipe = async () => {
-    await animate(k => { th.rotation.z = 0.2 * k; th.position.z = O.z + 0.002 * Math.sin(k * Math.PI); }, 0.4, 'head');
-    await animate((k, raw) => { th.rotation.z = 0.2 - 0.26 * k; U.uSlide.value = Math.min(1, raw * raw * (3 - 2 * raw) * 1.02); }, 0.55, 'linear');
+    await animate(k => thumb(0.2 * k, 0.002 * Math.sin(k * Math.PI)), 0.4, 'head');
+    await animate((k, raw) => { thumb(0.2 - 0.26 * k); U.uSlide.value = Math.min(1, raw * raw * (3 - 2 * raw) * 1.02); }, 0.55, 'linear');
     U.uSlide.value = 1;
-    await animate(k => { th.rotation.z = -0.06 * (1 - k); }, 0.3, 'head');
+    await animate(k => thumb(-0.06 * (1 - k)), 0.3, 'head');
   };
   return G;
 }
