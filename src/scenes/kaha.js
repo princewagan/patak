@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { pbr, std, glow, box, cyl, at, canvasTex, envFrom, blob } from '../engine/kit.js';
+import { pbr, tex, std, glow, box, cyl, at, canvasTex, envFrom, blob } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
@@ -73,7 +73,7 @@ export default {
     this.rects = [];
     for (const [x, z] of panels) {
       const dead = x === 1.0 && z < 0;   // one dead tube over the crew area: the register is the only lit island
-      const r = new THREE.RectAreaLight(FL, dead ? 0 : z < 0 ? 8 : 2.5, 1.2, 0.3); r.position.set(x, 2.98, z); r.lookAt(x, 0, z); S.add(r); this.rects.push(r);
+      if (!dead && z < 3) { const r = new THREE.RectAreaLight(FL, z < 0 ? 8 : 3.6, 1.2, 0.3); r.position.set(x, 2.98, z); r.lookAt(x, 0, z); S.add(r); this.rects.push(r); }
       const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), dead ? std(0x2a2d2b, { rough: 0.5 }) : glow(FL, 2.2)); p.rotation.x = PI / 2; p.position.set(x, 2.985, z); S.add(p);
     }
     const key = new THREE.SpotLight(0xf2fff4, 9, 7, 0.8, 0.85, 1.6); key.position.set(-0.6, 2.9, -1.4); key.target.position.set(-1.1, 0.9, -1.1);
@@ -93,7 +93,8 @@ export default {
       for (let i = 0; i < 300; i++) { c.fillStyle = `rgba(90,80,60,${Math.random() * 0.04})`; c.fillRect(Math.random() * w, Math.random() * h, 8, 8); }
     });
     tileT.wrapS = tileT.wrapT = THREE.RepeatWrapping; tileT.repeat.set(6, 2.4);
-    const tileM = new THREE.MeshStandardMaterial({ map: tileT, roughness: 0.35, envMapIntensity: 0.6 });
+    const tileM = new THREE.MeshStandardMaterial({ map: tileT, roughness: 0.42, envMapIntensity: 0.6, normalMap: tex('/tex/floor_tiles_06_nor.jpg', { repeat: [6, 2.4], srgb: false }), roughnessMap: tex('/tex/floor_tiles_06_rough.jpg', { repeat: [6, 2.4], srgb: false }) });
+    tileM.normalScale.set(0.7, 0.7);
     S.add(at(new THREE.Mesh(new THREE.PlaneGeometry(9, 3), tileM), 0.3, 1.5, -2.62));
     // brand-color stripe band (red/yellow) on the back wall
     S.add(at(box(9, 0.14, 0.02, std(0xb3221d, { rough: 0.5 })), 0.3, 2.05, -2.6));
@@ -117,8 +118,9 @@ export default {
     });
 
     /* ---------- crew area fixtures ---------- */
-    const steel = new THREE.MeshStandardMaterial({ color: 0xb4b9be, metalness: 0.85, roughness: 0.4 });
-    const steelDark = new THREE.MeshStandardMaterial({ color: 0x8e9499, metalness: 0.85, roughness: 0.4 });
+    const brushed = { normalMap: tex('/tex/metal_plate_nor.jpg', { repeat: [2, 2], srgb: false }), roughnessMap: tex('/tex/metal_plate_rough.jpg', { repeat: [2, 2], srgb: false }) };
+    const steel = new THREE.MeshStandardMaterial({ color: 0xb4b9be, metalness: 0.85, roughness: 0.75, ...brushed }); steel.normalScale.set(0.35, 0.35);
+    const steelDark = new THREE.MeshStandardMaterial({ color: 0x8e9499, metalness: 0.85, roughness: 0.75, ...brushed }); steelDark.normalScale.set(0.35, 0.35);
     // holding cabinet with heat lamps
     S.add(at(box(2.0, 0.75, 0.5, steel, 0.02), -0.4, 1.3, -2.25));
     S.add(at(box(1.9, 0.5, 0.02, new THREE.MeshPhysicalMaterial({ color: 0xffb070, roughness: 0.1, transmission: 0.2, transparent: true, opacity: 0.3 })), -0.4, 1.32, -1.99));
@@ -319,12 +321,12 @@ export default {
     /* ---------- crew ---------- */
     const crewTop = 0x8f1d1b, crewCap = 0x7d1714;
     const apron = (p, col = 0x1f1f22) => { const a = box(0.27, 0.42, 0.012, std(col, { rough: 0.9 })); a.position.set(0, 0.05, 0.095); p.spine.add(a); const t = box(0.05, 0.016, 0.003, std(0xf2f2f2, { rough: 0.5 })); t.position.set(0.07, 0.21, 0.105); p.spine.add(t); };
-    const weng = this.weng = new Person({ h: 1.55, skin: 'tan', top: crewTop, bottom: 0x1b1c1f, hair: 'bun', hairColor: 0x1d1714, cap: crewCap, build: 1.08, belly: true, sleeve: 0.14 });
+    const weng = this.weng = new Person({ real: 'weng', h: 1.55, skin: 'tan', top: crewTop, bottom: 0x1b1c1f, hair: 'bun', hairColor: 0x1d1714, cap: crewCap, build: 1.08, belly: true, sleeve: 0.14 });
     apron(weng); weng.hair.scale.set(0.95, 0.9, 0.97); weng.hair.children[weng.hair.children.length - 1].visible = false; weng.root.position.set(-1.55, 0, -1.4); weng.root.rotation.y = 0.75; S.add(weng.root); this.people.push(weng);
-    const joy = this.joy = new Person({ h: 1.6, skin: 'light', top: 0x9fb2c2, bottom: 0x24262c, hair: 'long', hairColor: 0x2a1d16, build: 1.0, sleeve: 0.12 });
+    const joy = this.joy = new Person({ real: 'joy', h: 1.6, skin: 'light', top: 0x9fb2c2, bottom: 0x24262c, hair: 'long', hairColor: 0x2a1d16, build: 1.0, sleeve: 0.12 });
     { const t = box(0.05, 0.016, 0.003, std(0xf7d24a, { rough: 0.5 })); t.position.set(0.07, 0.22, 0.1); joy.spine.add(t); }
     joy.root.position.set(-0.95, 0, -1.0); joy.root.rotation.y = 0.15; S.add(joy.root); this.people.push(joy);
-    const mark = this.mark = new Person({ h: 1.72, skin: 'brown', top: crewTop, bottom: 0x1b1c1f, hair: 'short', cap: crewCap, build: 0.95, sleeve: 0.14 });
+    const mark = this.mark = new Person({ real: 'mark', h: 1.72, skin: 'brown', top: crewTop, bottom: 0x1b1c1f, hair: 'short', cap: crewCap, build: 0.95, sleeve: 0.14 });
     apron(mark); mark.hair.scale.set(0.95, 0.9, 0.97); mark.root.position.set(1.35, 0, -1.6); mark.root.rotation.y = PI; S.add(mark.root); this.people.push(mark);
     for (const p of [weng, joy, mark]) { const b = blob(0.32, 0.45); b.position.y = 0.002; p.root.add(b); }
     // bills fanned in Joy's right hand while counting

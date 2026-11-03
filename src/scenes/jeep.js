@@ -105,7 +105,7 @@ export default {
     cab.add(at(box(2 * W, 0.06, 1.4, ceil), 0, CEIL + 0.02, -0.7));
     for (const sx of [-1, 1]) cab.add(at(box(0.04, CEIL, 1.4, paint), sx * (W + 0.02), CEIL / 2, -0.7));
     const ros = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.004, 4, 24), std(0x6b4a2b)); ros.position.set(0, 1.15, -1.15); ros.scale.y = 1.8; cab.add(ros);
-    const driver = new Person({ h: 1.66, skin: 'brown', top: 0x2f3b45, bottom: 0x2a2d33, hair: 'buzz', build: 1.1 });
+    const driver = new Person({ real: 'driver', h: 1.66, skin: 'brown', top: 0x2f3b45, bottom: 0x2a2d33, hair: 'buzz', build: 1.1 });
     driver.pose('sit', true).set({ shL: [-50, 0, 10], shR: [-50, 0, -10], elL: [-40, 0, 0], elR: [-40, 0, 0] }, true);
     driver.root.position.set(-0.42, 0.08, -0.55); driver.root.rotation.y = PI; cab.add(driver.root);
     this.people = [driver];
@@ -116,12 +116,12 @@ export default {
       p.root.position.set(x, 0, z); p.root.rotation.y = x < 0 ? PI / 2 : -PI / 2; J.add(p.root); this.people.push(p); return p;
     };
     const LX = -0.73, RX = 0.73;
-    this.l1 = P({ h: 1.7, skin: 'brown', top: 0x3b4a3a, bottom: 0x22262b, hair: 'short', build: 1.05, longSleeve: true }, LX, 1.45, 'sitSlump', { neck: [32, 0, 14] });
-    this.l2 = P({ h: 1.58, skin: 'light', top: 0xa9a59c, bottom: 0x2b3448, hair: 'long', build: 0.9 }, LX, 0.78, 'sit', { neck: [30, 0, 0], shL: [-26, 0, 10], elL: [-100, 10, 0], shR: [-22, 0, -10], elR: [-96, -10, 0] });
-    this.l3 = P({ h: 1.7, skin: 'dark', top: 0x7b6a52, bottom: 0x3a3a36, hair: 'short', cap: 0x2a3550, build: 1.15 }, LX, 0.1, 'sit', { shL: [-28, 0, 22], shR: [-28, 0, -22], elL: [-105, 0, -40], elR: [-105, 0, 40], neck: [10, 0, 0] });
+    this.l1 = P({ real: 'driver', h: 1.7, skin: 'brown', top: 0x3b4a3a, bottom: 0x22262b, hair: 'short', build: 1.05, longSleeve: true }, LX, 1.45, 'sitSlump', { neck: [32, 0, 14] });
+    this.l2 = P({ real: 'commuter', h: 1.58, skin: 'light', top: 0xa9a59c, bottom: 0x2b3448, hair: 'long', build: 0.9 }, LX, 0.78, 'sit', { neck: [30, 0, 0], shL: [-26, 0, 10], elL: [-100, 10, 0], shR: [-22, 0, -10], elR: [-96, -10, 0] });
+    this.l3 = P({ real: 'mark', h: 1.7, skin: 'dark', top: 0x7b6a52, bottom: 0x3a3a36, hair: 'short', cap: 0x2a3550, build: 1.15 }, LX, 0.1, 'sit', { shL: [-28, 0, 22], shR: [-28, 0, -22], elL: [-105, 0, -40], elR: [-105, 0, 40], neck: [10, 0, 0] });
     this.l4 = P({ h: 1.62, skin: 'tan', top: 0x5a4d6b, bottom: 0x2c2c30, hair: 'short', hairColor: 0x5c5853, build: 1.0 }, LX, -0.57, 'sitSlump', { neck: [24, 0, -10] });
     this.l5 = P({ h: 1.55, skin: 'tan', top: 0x9c3b4a, bottom: 0x1f2329, hair: 'bun', build: 1.05 }, LX, -1.24, 'sit', { neck: [-4, -30, 0] });
-    this.ale = P({ h: 1.55, skin: 'tan', top: 0x6b3550, bottom: 0x2a2627, hair: 'bun', hairColor: 0x2a2421, build: 1.15, belly: true }, RX, 0.6, 'sit', { neck: [6, 0, 0], shL: [-34, 0, 8], elL: [-60, 0, 0], shR: [-34, 0, -8], elR: [-60, 0, 0] });
+    this.ale = P({ real: 'tindera', h: 1.55, skin: 'tan', top: 0x6b3550, bottom: 0x2a2627, hair: 'bun', hairColor: 0x2a2421, build: 1.15, belly: true }, RX, 0.6, 'sit', { neck: [6, 0, 0], shL: [-34, 0, 8], elL: [-60, 0, 0], shR: [-34, 0, -8], elR: [-60, 0, 0] });
     this.r3 = P({ h: 1.72, skin: 'tan', top: 0x202326, bottom: 0x2b3448, hair: 'messy', build: 0.95 }, RX, -0.1, 'sit', { neck: [18, 0, 0] });
     this.r4 = P({ h: 1.58, skin: 'light', top: 0x4f6f7f, bottom: 0x2a2a2a, hair: 'long', build: 1 }, RX, -0.78, 'sitSlump', { neck: [30, 0, 18] });
     this.r5 = P({ h: 1.68, skin: 'brown', top: 0x8a8070, bottom: 0x2d2a25, hair: 'short', build: 1.1 }, RX, -1.45, 'sit', {});
@@ -152,7 +152,7 @@ export default {
     this.coin.visible = false; this.held.add(this.coin); this.coin.position.set(0.02, -0.16, -0.3); this.coin.rotation.set(1.2, 0, 0.3);
 
     // ---------- the boy ----------
-    const boy = this.boy = new Person({ h: 1.24, skin: 'brown', top: 0x7d786c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
+    const boy = this.boy = new Person({ real: 'boy', h: 1.24, skin: 'brown', top: 0x7d786c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
     boy.root.position.set(0.1, -0.8, 4.2); J.add(boy.root); this.people.push(boy);
     const rag = box(0.12, 0.02, 0.09, std(0x6d6a63, { rough: 1 })); rag.position.set(0, -0.09, 0.02); boy.arm.R.wr.add(rag);
     const stack = box(0.1, 0.03, 0.16, std(0xe8e2d2, { rough: 0.9 })); stack.position.set(0, -0.08, 0.03); stack.rotation.x = -0.3; boy.arm.L.wr.add(stack); this.stack = stack;

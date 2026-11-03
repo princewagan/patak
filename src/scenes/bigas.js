@@ -250,15 +250,15 @@ export default {
     const pole = cyl(0.1, 0.14, 7, std(0x77746e, { rough: 0.9 })); pole.position.set(6.6, 3.5, 2.0); S.add(pole);
 
     // ---------- people ----------
-    const lola = this.lola = new Person({ h: 1.45, skin: 'brown', top: 0x6e5a6b, bottom: 0x4a4440, skirt: true, hair: 'none', hairColor: 0x9c968d, build: 0.86, longSleeve: true, shoes: 0x2a2522 });
+    const lola = this.lola = new Person({ real: 'lola', h: 1.45, skin: 'brown', top: 0x6e5a6b, bottom: 0x4a4440, skirt: true, hair: 'none', hairColor: 0x9c968d, build: 0.86, longSleeve: true, shoes: 0x2a2522 });
     {
       const clothN = pbr('denim_fabric', { repeat: [3, 3] }).normalMap;
       const kerM = new THREE.MeshStandardMaterial({ color: 0x5e5546, roughness: 0.95, normalMap: clothN, side: THREE.DoubleSide });
       const hr = lola.hr;
       const ker = new THREE.Mesh(new THREE.SphereGeometry(hr * 1.13, 26, 16, 0, PI * 2, 0, PI * 0.74), kerM);
-      ker.position.set(0, hr * 0.98, -hr * 0.05); ker.rotation.x = -0.42; ker.scale.set(0.93, 1.02, 1.08); ker.castShadow = true; lola.head.add(ker);
-      const knot = new THREE.Mesh(new THREE.SphereGeometry(hr * 0.22, 10, 8), kerM); knot.position.set(0, hr * 0.32, hr * 0.62); lola.head.add(knot);
-      const flap = new THREE.Mesh(new THREE.ConeGeometry(hr * 0.75, hr * 1.3, 3, 1, true), kerM); flap.scale.z = 0.25; flap.rotation.set(0.15, 0, PI); flap.position.set(0, hr * 0.15, -hr * 0.82); lola.head.add(flap);
+      ker.position.set(0, hr * 0.98, -hr * 0.05); ker.rotation.x = -0.42; ker.scale.set(0.93, 1.02, 1.08); ker.castShadow = true; if (!lola.real) lola.head.add(ker);
+      const knot = new THREE.Mesh(new THREE.SphereGeometry(hr * 0.22, 10, 8), kerM); knot.position.set(0, hr * 0.32, hr * 0.62); if (!lola.real) lola.head.add(knot);
+      const flap = new THREE.Mesh(new THREE.ConeGeometry(hr * 0.75, hr * 1.3, 3, 1, true), kerM); flap.scale.z = 0.25; flap.rotation.set(0.15, 0, PI); flap.position.set(0, hr * 0.15, -hr * 0.82); if (!lola.real) lola.head.add(flap);
       const V = (x, y) => new THREE.Vector2(x, y), sc = lola.H / 1.7;
       const shawl = new THREE.Mesh(new THREE.LatheGeometry([V(0.046, 0.16), V(0.052, 0.12), V(0.062, 0.08), V(0.09, 0.045), V(0.15, -0.0), V(0.19, -0.06), V(0.205, -0.15), V(0.2, -0.27)].map(v => v.multiplyScalar(sc)), 28),
         new THREE.MeshStandardMaterial({ color: 0x6b5f4f, roughness: 0.97, normalMap: clothN, side: THREE.DoubleSide }));
@@ -266,7 +266,7 @@ export default {
     }
     lola.root.position.set(0.02, 0, 0.74); lola.root.rotation.y = PI; lola.pose('stoop', true); S.add(lola.root); this.people.push(lola);
     const purse = box(0.09, 0.06, 0.03, std(0x7a2d3a, { rough: 0.6 }), 0.012); purse.position.set(0, -0.08, 0.025); lola.arm.R.wr.add(purse); this.purse = purse;
-    const tindera = this.tindera = new Person({ h: 1.56, skin: 'tan', top: 0xb47f78, bottom: 0xb47f78, skirt: true, hair: 'bun', build: 1.12, belly: true });
+    const tindera = this.tindera = new Person({ real: 'tindera', h: 1.56, skin: 'tan', top: 0xb47f78, bottom: 0xb47f78, skirt: true, hair: 'bun', build: 1.12, belly: true });
     tindera.root.position.set(0.02, 0, -0.48); tindera.pose('standRelaxed', true); S.add(tindera.root); this.people.push(tindera);
     const lista = box(0.12, 0.17, 0.012, std(0x2f4f8f, { rough: 0.6 })); lista.position.set(0, -0.09, 0.03); lista.visible = false; tindera.arm.R.wr.add(lista); this.lista = lista;
     S.add(at(blob(0.3, 0.55), 0.02, 0.004, 0.74));

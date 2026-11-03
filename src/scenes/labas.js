@@ -517,26 +517,26 @@ export default {
     };
     const P = this.P = {};
     // Prince: light blue tee, dark lanyard (IMG_6462, IMG_6476)
-    P.prince = person({ h: 1.91, skin: 0xb8917a, top: 0x7ba6cf, bottom: 0x1d2024, hair: 'messy', build: 0.95, sleeve: 0.14 }, 1.1, 7.0, PI + 0.5);
+    P.prince = person({ real: 'prince', h: 1.91, skin: 0xb8917a, top: 0x7ba6cf, bottom: 0x1d2024, hair: 'messy', build: 0.95, sleeve: 0.14 }, 1.1, 7.0, PI + 0.5);
     const lan = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.007, 5, 24), std(0x1b2440)); lan.position.set(0, 0.26, 0.09); lan.scale.set(0.8, 1.35, 0.42); P.prince.chest.parent.add(lan);
     // the three behind us in IMG_6462
-    P.tatay = person({ h: 1.8, skin: 0x8f6d58, top: 0x6f6a72, bottom: 0x3a3a3e, hair: 'short', hairColor: 0x77726a, build: 0.88, sleeve: 0.13, collar: true, slippers: true }, -1.42, -1.1, PI - 0.2, true);
+    P.tatay = person({ real: 'driver', h: 1.8, skin: 0x8f6d58, top: 0x6f6a72, bottom: 0x3a3a3e, hair: 'short', hairColor: 0x77726a, build: 0.88, sleeve: 0.13, collar: true, slippers: true }, -1.42, -1.1, PI - 0.2, true);
     P.tatay.set({ shL: [2, 0, 7], shR: [2, 0, -7], neck: [4, 0, 0] }, true);
-    P.kuya = person({ h: 1.93, skin: 0xa98068, top: 0x101114, bottom: 0x121316, hair: 'short', cap: 0x274a86, build: 1.22, belly: true, shorts: true, slippers: true, sleeve: 0.13, print: leafPrint(), printSize: [0.2, 0.15] }, 2.75, 3.15, -0.75);
+    P.kuya = person({ real: 'mark', h: 1.93, skin: 0xa98068, top: 0x101114, bottom: 0x121316, hair: 'short', cap: 0x274a86, build: 1.22, belly: true, shorts: true, slippers: true, sleeve: 0.13, print: leafPrint(), printSize: [0.2, 0.15] }, 2.75, 3.15, -0.75);
     P.kuya.set({ shL: [-24, 0, 20], shR: [-36, 0, -20], elL: [-104, 0, -66], elR: [-100, 0, 64] }, true);
-    P.ate = person({ h: 1.75, skin: 0xa98068, top: 0xd6d4ce, bottom: 0x1a2238, hair: 'bun', build: 0.92, sleeve: 0.12, slippers: true }, 1.7, -1.9, PI + 0.32);
+    P.ate = person({ real: 'commuter', h: 1.75, skin: 0xa98068, top: 0xd6d4ce, bottom: 0x1a2238, hair: 'bun', build: 0.92, sleeve: 0.12, slippers: true }, 1.7, -1.9, PI + 0.32);
     P.ate.set({ shR: [-34, 0, -6], elR: [-82, 0, 8] }, true);
     this.ateU = umbrella(0x101114); S.add(this.ateU);
     // neighbors along the lane, out of their doors, all looking down at the water
-    P.gate = person({ h: 1.72, skin: 0xa98068, top: 0x8e5a6a, bottom: 0x2b2f38, hair: 'long', build: 1.05, sleeve: 0.12, slippers: true }, -2.7, 3.35, PI - 0.5, true);
+    P.gate = person({ real: 'tindera', h: 1.72, skin: 0xa98068, top: 0x8e5a6a, bottom: 0x2b2f38, hair: 'long', build: 1.05, sleeve: 0.12, slippers: true }, -2.7, 3.35, PI - 0.5, true);
     P.gate.set({ shL: [0, 0, 8], shR: [-20, 0, -6], elR: [-70, 0, 0] }, true);
-    P.gate2 = person({ h: 1.42, skin: 0xa98068, top: 0xc9b24a, bottom: 0x23324a, hair: 'short', build: 0.9, sleeve: 0.1, shorts: true, slippers: true }, -2.35, 2.9, PI - 0.35, true);
-    P.door = person({ h: 1.84, skin: 0x8f6d58, top: 0x4e5a44, bottom: 0x2a2520, hair: 'short', build: 1.0, sleeve: 0.13, shorts: true, slippers: true }, 2.95, -0.1, PI + 0.45);
+    P.gate2 = person({ real: 'boy', h: 1.42, skin: 0xa98068, top: 0xc9b24a, bottom: 0x23324a, hair: 'short', build: 0.9, sleeve: 0.1, shorts: true, slippers: true }, -2.35, 2.9, PI - 0.35, true);
+    P.door = person({ real: 'driver', h: 1.84, skin: 0x8f6d58, top: 0x4e5a44, bottom: 0x2a2520, hair: 'short', build: 1.0, sleeve: 0.13, shorts: true, slippers: true }, 2.95, -0.1, PI + 0.45);
     P.door.set({ spine: [3, 0, 0] }, true);
-    P.door2 = person({ h: 1.68, skin: 0x8f6d58, top: 0xb9b2a6, bottom: 0x4a3b34, hair: 'bun', hairColor: 0x3b3733, build: 1.08, sleeve: 0.12, slippers: true }, 2.6, 0.75, PI + 0.3);
+    P.door2 = person({ real: 'tindera', h: 1.68, skin: 0x8f6d58, top: 0xb9b2a6, bottom: 0x4a3b34, hair: 'bun', hairColor: 0x3b3733, build: 1.08, sleeve: 0.12, slippers: true }, 2.6, 0.75, PI + 0.3);
     P.door2.set({ shL: [-24, 0, 16], shR: [-34, 0, -16], elL: [-104, 0, -62], elR: [-100, 0, 60] }, true);
     // Keira: black tank top, long wet hair (IMG_6462). We only step out of her eyes once, to watch her go up to him.
-    P.keira = person({ h: 1.72, skin: 0xb8917a, top: 0x0d0e10, bottom: 0x16181c, hair: 'long', tank: true, build: 0.98, slippers: true }, -0.24, 1.25, PI);
+    P.keira = person({ real: 'keira', h: 1.72, skin: 0xb8917a, top: 0x0d0e10, bottom: 0x16181c, hair: 'long', tank: true, build: 0.98, slippers: true }, -0.24, 1.25, PI);
     P.keira.root.visible = false; P.keira.shadow.visible = false;
     for (const p of this.people) p.shade(0.74);
     P.tatay.skinMat.color.multiplyScalar(0.62);                                  // the one face we get near: keep it low

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { tex } from './kit.js';
+import { RealBody, realModel } from './realbody.js';
 import { config, bodyParts, scaled, handGeometry, footGeometry, headGeometry, longHair, chestDecal, scalpCap, hairTufts, BIND, FOOT, BONES } from './body.js';
 
 /*
@@ -166,9 +167,9 @@ export class Person {
     }
     if (o.cap) { // crew cap with visor (shades the eyes)
       const cm = mat(o.cap, 0.8);
-      const crown = mesh(new THREE.SphereGeometry(hr, 26, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), cm); crown.position.set(0, hr * 1.2, -hr * 0.09); crown.rotation.x = -0.2; crown.scale.set(1.0, 0.93, 1.13); head.add(crown);
-      const band = mesh(new THREE.CylinderGeometry(hr, hr * 1.005, hr * 0.14, 26, 1, true), cm); band.position.set(0, hr * 1.17, -hr * 0.09); band.rotation.x = -0.2; band.scale.set(1.0, 1, 1.13); head.add(band);
-      const visor = mesh(new THREE.CylinderGeometry(hr * 0.8, hr * 0.8, hr * 0.045, 22, 1, false, -Math.PI * 0.5, Math.PI), cm); visor.position.set(0, hr * 1.3, hr * 0.72); visor.rotation.x = 0.1; visor.scale.set(0.95, 1, 0.95); head.add(visor);
+      const crown = mesh(new THREE.SphereGeometry(hr, 26, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), cm); crown.userData.keep = true; crown.position.set(0, hr * 1.2, -hr * 0.09); crown.rotation.x = -0.2; crown.scale.set(1.0, 0.93, 1.13); head.add(crown);
+      const band = mesh(new THREE.CylinderGeometry(hr, hr * 1.005, hr * 0.14, 26, 1, true), cm); band.userData.keep = true; band.position.set(0, hr * 1.17, -hr * 0.09); band.rotation.x = -0.2; band.scale.set(1.0, 1, 1.13); head.add(band);
+      const visor = mesh(new THREE.CylinderGeometry(hr * 0.8, hr * 0.8, hr * 0.045, 22, 1, false, -Math.PI * 0.5, Math.PI), cm); visor.userData.keep = true; visor.position.set(0, hr * 1.3, hr * 0.72); visor.rotation.x = 0.1; visor.scale.set(0.95, 1, 0.95); head.add(visor);
     }
     if (o.scarf) { // lola's shawl / kerchief over head and shoulders
       const sm = mat(o.scarf, 0.95, { side: THREE.DoubleSide });
@@ -190,6 +191,13 @@ export class Person {
     this.anim = null; // custom per-frame animation fn(t, person)
     this.speed = 6;
     this.pose('stand', true);
+    const rec = o.real && realModel(o.real);
+    if (rec) { // the procedural person keeps working as the puppet; the scanned body copies it (see realbody.js)
+      root.updateMatrixWorld(true);
+      root.traverse(n => { if (n.isMesh && !n.userData.keep) n.visible = false; });
+      this.real = new RealBody(this, rec, { ...o.realOpts, role: o.real }); root.add(this.real.group);
+      root.traverse(n => { if (n.userData.keep) { n.scale.multiplyScalar(0.92); n.position.y += hr * 0.02; n.position.z -= hr * 0.06; } });  // the cap, fitted to the real head
+    }
   }
 
   collect() {
@@ -364,6 +372,7 @@ export class Person {
     for (const e of this.eyes) e.scale.y = lid;
 
     if (this.anim) this.anim(t, this, dt);
+    this.real?.sync();
   }
 }
 

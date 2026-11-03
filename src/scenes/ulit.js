@@ -100,7 +100,7 @@ export default {
     const warm = new THREE.PointLight(0xffb067, 7, 7, 1.8); warm.position.set(0, 1.9, -0.4); warm.castShadow = true; warm.shadow.mapSize.set(1024, 1024); warm.shadow.bias = -0.002; inside.add(warm);
     const spill = new THREE.SpotLight(0xffa955, 18, 9, 0.85, 0.7, 1.6); spill.position.set(0, 2.1, -2.4); spill.target.position.set(0, 0, 1.5); G.add(spill, spill.target);
     // the baker, inside, soft and out of focus
-    const baker = new Person({ h: 1.6, skin: 'tan', top: 0xece6da, bottom: 0x2a2a2c, hair: 'bun', build: 1.1 });
+    const baker = new Person({ real: 'tindera', h: 1.6, skin: 'tan', top: 0xece6da, bottom: 0x2a2a2c, hair: 'bun', build: 1.1 });
     baker.pose('standRelaxed', true); baker.root.position.set(-0.6, 0, -3.1); G.add(baker.root); this.people.push(baker);
     const apron = box(0.32, 0.5, 0.02, std(0xd9d2c4)); apron.position.set(0, 0.62, 0.11); baker.root.add(apron);
     // tin awning over the sidewalk, dripping
@@ -126,7 +126,7 @@ export default {
     const fill = new THREE.PointLight(0xffb878, 1.6, 3.2, 1.8); fill.position.set(0.55, 1.05, -1.25); G.add(fill);
 
     // ---- Totoy ----
-    const boy = this.boy = new Person({ h: 1.24, skin: 'brown', top: 0xb9b19c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
+    const boy = this.boy = new Person({ real: 'boy', h: 1.24, skin: 'brown', top: 0xb9b19c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
     const wh = boy.hair.children[0]; if (wh) { wh.material = wh.material.clone(); wh.material.roughness = 0.28; }
     G.add(boy.root); this.people.push(boy);
     G.add(this.boyShadow = blob(0.28, 0.55));
@@ -208,7 +208,7 @@ export default {
     ill.position.set(-0.17, 0.02, 0.06); kid.spine.add(ill);
     G.add(this.kidShadow = blob(0.3, 0.35));
     // Ate Weng + the neighbor at her gate (left side, gate at z = -1.2 + ... see loop: first left gate is at z = 2.8)
-    const weng = this.ateWeng = new Person({ h: 1.56, skin: 'tan', top: 0xb98a92, bottom: 0x2b2d33, hair: 'bun', build: 1.1 });
+    const weng = this.ateWeng = new Person({ real: 'weng', h: 1.56, skin: 'tan', top: 0xb98a92, bottom: 0x2b2d33, hair: 'bun', build: 1.1 });
     G.add(weng.root); this.people.push(weng);
     const nb = this.neighbor = new Person({ h: 1.53, skin: 'light', top: 0x6d8fa6, bottom: 0x6d8fa6, skirt: true, hair: 'short', hairColor: 0x7d7770, build: 1.15 });
     G.add(nb.root); this.people.push(nb);
@@ -286,7 +286,7 @@ export default {
       };
     });
     // Lola Ising
-    const lola = this.lolaP = new Person({ h: 1.48, skin: 'brown', top: 0x6f7f94, bottom: 0x6f7f94, skirt: true, hair: 'bun', hairColor: 0x9a948c, build: 0.95 });
+    const lola = this.lolaP = new Person({ real: 'lola', h: 1.48, skin: 'brown', top: 0x6f7f94, bottom: 0x6f7f94, skirt: true, hair: 'bun', hairColor: 0x9a948c, build: 0.95 });
     G.add(lola.root); this.people.push(lola);
     this.stool = cyl(0.17, 0.15, 0.3, std(0x6a4e34, { rough: 0.7 }), 16); G.add(this.stool);
   },

@@ -92,7 +92,7 @@ export default {
     this.dayLight = new THREE.PointLight(0xdfe8f2, 2.2, 7, 1.2); this.dayLight.position.set(1.5, 0.3, -0.1); S.add(this.dayLight);
 
     // ---- Prince, driving (light blue shirt + lanyard, from the photos) ----
-    const prince = this.prince = new Person({ h: 1.72, skin: 'tan', top: 0x8ab6dc, bottom: 0x23262b, hair: 'messy', build: 0.95, sleeve: 0.14 });
+    const prince = this.prince = new Person({ real: 'prince', h: 1.72, skin: 'tan', top: 0x8ab6dc, bottom: 0x23262b, hair: 'messy', build: 0.95, sleeve: 0.14 });
     prince.pose('sit', true).set({ shL: [-58, 0, 14], shR: [-56, 0, -12], elL: [-28, 0, 0], elR: [-30, 0, 0], neck: [4, 0, 0] }, true);
     prince.root.position.set(-0.74, -1.12, 0.12); prince.root.rotation.y = PI; C.add(prince.root);
     const lan = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.006, 4, 24, PI * 1.2), std(0x1b2440)); lan.position.set(0, 0.25, 0.06); lan.rotation.set(0.25, 0, PI * 1.1 + 0.3); prince.chest.parent.add(lan);

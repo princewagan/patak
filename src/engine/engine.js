@@ -149,6 +149,7 @@ export class Engine {
 
   /** drop render resolution if the machine can't keep up (checked every 2 s) */
   adapt(raw) {
+    if (raw > 0.2) return;
     this._ft = (this._ft || 0) + raw; this._fn = (this._fn || 0) + 1;
     if (this._ft < 2) return;
     const avg = this._ft / this._fn; this._ft = 0; this._fn = 0;

@@ -1,4 +1,5 @@
 import { audio } from './engine/audio.js';
+import { preloadReal } from './engine/realbody.js';
 import { music } from './engine/music.js';
 import { tickTweens } from './engine/tween.js';
 
@@ -18,6 +19,7 @@ const ORDER = ['jeep', 'kaha', 'bigas', 'gabi', 'car', 'labas', 'baha', 'ulit', 
 
 export async function preload(engine) {
   engine.onUpdate(dt => tickTweens(dt));
+  if (!new URLSearchParams(location.search).has('noreal')) await preloadReal(['mark', 'joy', 'weng', 'driver', 'boy', 'tindera', 'commuter', 'lola', 'prince', 'keira']);
   for (const name of ORDER) {
     const f = files[`./scenes/${name}.js`];
     if (!f) continue;
