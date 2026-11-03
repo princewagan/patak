@@ -4,6 +4,7 @@ import { pbr, tex, std, glow, box, cyl, at, canvasTex, envFrom, blob } from '../
 import { Person } from '../engine/person.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
+import { billMesh } from '../engine/money.js';
 import { animate, moveTo, walkPath, loop } from '../engine/tween.js';
 import { phoneModel, chatScreen } from './phone.js';
 import { prewarm } from '../engine/prewarm.js';
@@ -331,7 +332,7 @@ export default {
     for (const p of [weng, joy, mark]) { const b = blob(0.32, 0.45); b.position.y = 0.002; p.root.add(b); }
     // bills fanned in Joy's right hand while counting
     this.bills = new THREE.Group();
-    for (let i = 0; i < 5; i++) { const b = box(0.07, 0.15, 0.002, std([0xd8b33a, 0x2b5aa8, 0x7a5ca8][i % 3], { rough: 0.85 })); b.position.set(0, -0.08, 0.02 + i * 0.002); b.rotation.z = (i - 2) * 0.08; this.bills.add(b); }
+    for (let i = 0; i < 5; i++) { const b = billMesh(i % 2 ? 50 : 100, 0.15); b.position.set(0, -0.08, 0.02 + i * 0.002); b.rotation.z = Math.PI / 2 + (i - 2) * 0.08; this.bills.add(b); }
     joy.arm.L.wr.add(this.bills);
 
     this.beepStop = null;

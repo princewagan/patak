@@ -5,6 +5,7 @@ import { Person } from '../engine/person.js';
 import { Rain, Splashes } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
+import { billMesh, pesoCoin } from '../engine/money.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 
 const PI = Math.PI;
@@ -85,11 +86,6 @@ function riceBag(scale = 1) {
   const knot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 8), bag.material); knot.position.y = 0.11; g.add(knot);
   g.scale.setScalar(scale); g.traverse(o => { if (o.isMesh) o.castShadow = true; });
   return g;
-}
-
-function coinMesh(r = 0.012, color = 0xc9b27a) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.0025, 18), new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 0.32 }));
-  m.castShadow = true; return m;
 }
 
 export default {
@@ -274,9 +270,9 @@ export default {
     // coins Lola counts out on the ledge (₱40: three ₱10 + two ₱5)
     this.ledgeCoins = [];
     [[-0.12, 0.2, 0.0135], [-0.08, 0.17, 0.0135], [-0.04, 0.215, 0.0135], [0.0, 0.18, 0.012], [0.04, 0.205, 0.012]].forEach(([x, z, rr]) => {
-      const c = coinMesh(rr, rr > 0.013 ? 0xd2bd84 : 0xbfc3c6); c.position.set(x, LEDGE + 0.002, z); c.visible = false; S.add(c); this.ledgeCoins.push(c);
+      const c = pesoCoin(rr > 0.013 ? 10 : 5); c.position.set(x, LEDGE + 0.002, z); c.visible = false; S.add(c); this.ledgeCoins.push(c);
     });
-    this.myCoin = coinMesh(0.0135, 0xd6c27e); this.myCoin.position.set(0.1, LEDGE + 0.002, 0.2); this.myCoin.visible = false; S.add(this.myCoin);
+    this.myCoin = pesoCoin(20); this.myCoin.position.set(0.1, LEDGE + 0.002, 0.2); this.myCoin.visible = false; S.add(this.myCoin);
     // rice bags + your pancit canton on the ledge
     this.bagFull = riceBag(1); this.bagHalf = riceBag(0.72);
     for (const b of [this.bagFull, this.bagHalf]) { b.visible = false; S.add(b); }
@@ -290,11 +286,11 @@ export default {
     const wallet = this.wallet = new THREE.Group();
     const leather = new THREE.MeshStandardMaterial({ color: 0x3b2a1f, roughness: 0.55, normalMap: pbr('leather_red_03', { noDiff: true }).normalMap });
     wallet.add(at(box(0.11, 0.004, 0.09, leather, 0.002), 0, 0, 0));
-    const bill = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.045), new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide, map: canvasTex(200, 90, (c, w, h) => { c.fillStyle = '#7b6aa8'; c.fillRect(0, 0, w, h); c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.arc(150, 45, 28, 0, 7); c.fill(); c.fillStyle = '#efe9ff'; c.font = 'bold 26px Inter'; c.fillText('100', 14, 34); }) }));
+    const bill = billMesh(100, 0.1);
     bill.rotation.x = -PI / 2 + 0.25; bill.position.set(0, 0.015, -0.01); wallet.add(bill);
-    for (let i = 0; i < 4; i++) { const c = coinMesh(0.011, i % 2 ? 0xc9b27a : 0xbfc3c6); c.position.set(-0.03 + i * 0.02, 0.005, 0.025); wallet.add(c); }
+    for (let i = 0; i < 4; i++) { const c = pesoCoin(i % 2 ? 10 : 5); c.position.set(-0.03 + i * 0.02, 0.005, 0.025); wallet.add(c); }
     wallet.position.set(0.04, -0.12, -0.48); wallet.rotation.set(0.85, 0.15, 0); wallet.visible = false; this.held.add(wallet);
-    this.heldCoin = coinMesh(0.0135, 0xd6c27e); this.heldCoin.rotation.set(1.3, 0, 0.2); this.heldCoin.position.set(0.04, -0.09, -0.3); this.heldCoin.visible = false; this.held.add(this.heldCoin);
+    this.heldCoin = pesoCoin(20); this.heldCoin.rotation.set(1.3, 0, 0.2); this.heldCoin.position.set(0.04, -0.09, -0.3); this.heldCoin.visible = false; this.held.add(this.heldCoin);
     const coinL = new THREE.PointLight(0xffb070, 0.06, 0.8, 2); coinL.position.set(0, 0.05, -0.2); this.held.add(coinL);
 
     // ---------- weather ----------

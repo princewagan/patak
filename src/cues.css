@@ -28,14 +28,16 @@
 @keyframes nameslam { 0% { opacity: 0; transform: translateX(calc(var(--u) * -14)) scale(1.18); } 100% { opacity: 1; transform: none; } }
 @keyframes namegone { to { opacity: 0; transform: translateX(calc(var(--u) * -9)); } }
 
-/* CONTRACTUAL: a rubber stamp */
-#ihud .seal { position: absolute; right: calc(var(--u) * 6); top: calc(var(--bar) + var(--u) * 9); text-align: center; opacity: 0; }
-#ihud .seal.on { opacity: 1; animation: sealdown .24s cubic-bezier(.3, 0, .3, 1) both; }
-#ihud .seal.off { opacity: 1; animation: sealgone .3s ease-in both; }
-#ihud .seal b { display: inline-block; padding: calc(var(--u) * .5) calc(var(--u) * 1.5) calc(var(--u) * .34); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 6.6); line-height: 1; color: #ff5a4c; border: calc(var(--u) * .4) solid #ff5a4c; background: rgba(8, 4, 4, .62); text-transform: uppercase; transform: rotate(-5deg); }
-#ihud .seal span { display: block; width: max-content; max-width: calc(var(--u) * 34); margin: calc(var(--u) * 1.6) auto 0; font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.4); line-height: 1.14; color: #fff; text-shadow: 0 0 calc(var(--u) * .7) #000, 0 0 calc(var(--u) * .2) #000; }
-@keyframes sealdown { 0% { opacity: 0; transform: scale(2.3); } 72% { opacity: 1; transform: scale(.96); } 100% { opacity: 1; transform: none; } }
-@keyframes sealgone { to { opacity: 0; transform: scale(.92); } }
+/* CONTRACTUAL: the same slanted plates as IKAW and the main menu, sliding in from the other side */
+#ihud .seal { position: absolute; right: calc(var(--u) * 5.2); top: calc(var(--bar) + var(--u) * 5); display: flex; flex-direction: column; align-items: flex-end; opacity: 0; }
+#ihud .seal.on { opacity: 1; animation: sealin .4s cubic-bezier(.12, 1.1, .3, 1) both; }
+#ihud .seal.off { opacity: 1; animation: sealgone .34s ease-in both; }
+#ihud .seal b { position: relative; isolation: isolate; display: inline-block; padding: calc(var(--u) * .42) calc(var(--u) * 1.8) calc(var(--u) * .2); font-family: var(--hud); font-weight: 700; font-size: calc(var(--u) * 5.6); line-height: 1; letter-spacing: -.008em; text-transform: uppercase; color: #05080b; transform: skewX(-9deg); }
+#ihud .seal b::before { content: ''; position: absolute; inset: 0; z-index: -1; background: #fff; clip-path: polygon(calc(var(--u) * 1) 0, 100% 0, 100% calc(100% - var(--u) * .7), calc(100% - var(--u) * .7) 100%, 0 100%); }
+#ihud .seal b::after { content: ''; position: absolute; z-index: -2; left: calc(var(--u) * -.75); right: calc(var(--u) * .55); top: calc(var(--u) * .45); bottom: calc(var(--u) * -.38); background: var(--hot); clip-path: polygon(0 18%, 100% 0, 96% 100%, calc(var(--u) * 1.4) 90%); }
+#ihud .seal span { display: block; width: max-content; max-width: calc(var(--u) * 36); margin-top: calc(var(--u) * 1); padding: calc(var(--u) * .34) calc(var(--u) * 1) calc(var(--u) * .3); text-align: right; font-family: var(--hud); font-weight: 600; font-size: calc(var(--u) * 2.2); line-height: 1.12; color: #fff; background: rgba(4, 7, 10, .88); transform: skewX(-9deg); }
+@keyframes sealin { 0% { opacity: 0; transform: translateX(calc(var(--u) * 12)) scale(1.1); } 100% { opacity: 1; transform: none; } }
+@keyframes sealgone { to { opacity: 0; transform: translateX(calc(var(--u) * 9)); } }
 
 /* the money */
 #ihud .cash { position: absolute; right: calc(var(--u) * 6); top: calc(var(--bar) + var(--u) * 2.2); text-align: right; opacity: 0; transform: translateY(calc(var(--u) * 1)); transition: opacity .3s, transform .4s cubic-bezier(.16, .9, .24, 1); text-shadow: 0 0 calc(var(--u) * 1.1) rgba(0, 0, 0, .85); }

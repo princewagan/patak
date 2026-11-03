@@ -141,6 +141,7 @@ const CREDITS = [
   '<b>Mga totoong recording mula sa Pilipinas:</b> kevp888 sa Freesound (CC BY): jeep, trapiko sa Maynila, mall, night market, tandang, tuko, gabi sa subdivision.',
   '<b>Videoke sa Biñan, Laguna:</b> Björn Eriksson, Aporee at Internet Archive (Public Domain Mark).',
   '<b>Ulan, fast food, baha, at iba pa:</b> martialway47, Sassaby, MrFossy, richwise, logancircle2, lauramellis, unfa, jankisjes, pinchos, Nakhas, AardsReal, zoombackcamera, Cinetony, kalisemorrison, lolamadeus, ViaTorci, kyles, IsakIzzy, MTJohnson, MootMcnoodles, nooly, haulaway, SpaceJoe, aunrea, Weak_Hero, jaziel_.arroyo, ryansitz, rosenberg3, TariqMK (Freesound, CC0).',
+  '<b>Mga larawan ng piso:</b> Wikimedia Commons at Wikipedia. Listahan: tex/money/CREDITS.md.',
   'Buong listahan: audio/CREDITS.md. Ang tunog ng baha sa Part Three ay sariling recording namin noong Agosto 17, 2026.',
 ];
 
@@ -184,7 +185,7 @@ export function titleScreen(canvas) {
   size(); addEventListener('resize', size);
 
   /* ---------- state ---------- */
-  let shown = false, gate = false, reveal = 0, flash = 0, nextFlash = 9, drop = [-1, -1, -1], nextDrop = 3.2;
+  let shown = false, gate = false, reveal = 0, flash = 0, flicker = 0, nextFlash = 9, drop = [-1, -1, -1], nextDrop = 3.2;
   const mouse = [0, 0], eased = [0, 0];
   addEventListener('mousemove', e => { mouse[0] = e.clientX / innerWidth * 2 - 1; mouse[1] = 1 - e.clientY / innerHeight * 2; });
 
@@ -209,7 +210,7 @@ export function titleScreen(canvas) {
   const leaveGate = () => {
     if (!gate) return;
     audio.unlock(); audio.titleBed(1); audio.gateOpen();
-    drop = [.3, .2, 0]; nextDrop = 7; nextFlash = 5;
+    drop = [.3, .2, 0]; nextDrop = 7; nextFlash = 3.5;
     openMenu();
   };
   addEventListener('pointerdown', () => { if (gate) leaveGate(); }, true);
@@ -266,7 +267,8 @@ export function titleScreen(canvas) {
     } else {
       reveal = Math.min(1, reveal + dt / 2.4);
       nextFlash -= dt; nextDrop -= dt;
-      if (nextFlash <= 0) { flash = 1; nextFlash = 11 + Math.random() * 13; audio.titleThunder(); }
+      if (nextFlash <= 0) { flash = 1; flicker = 0.14 + Math.random() * 0.12; nextFlash = 8 + Math.random() * 9; audio.titleThunder(); }
+      if (flicker > 0) { flicker -= dt; if (flicker <= 0) flash = Math.max(flash, 0.9); }   // lightning strikes twice in a blink
       if (nextDrop <= 0) { drop = [.16 + Math.random() * .5, .1 + Math.random() * .3, 0]; nextDrop = 6.5 + Math.random() * 3; audio.titleDrop(); }
     }
     flash = Math.max(0, flash * Math.exp(-dt * 6.5) - dt * .05);

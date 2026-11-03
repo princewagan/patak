@@ -4,6 +4,7 @@ import { Person } from '../engine/person.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
+import { pesoCoin } from '../engine/money.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 import { makeStreet, Traffic } from './street.js';
 import { makePhone } from './phone.js';
@@ -148,7 +149,7 @@ export default {
       const e = envelope(false); e.rotation.x = -PI / 2; e.position.set(0, 0.5, 0.25); e.visible = false; p.root.add(e); this.laps.push(e);
     }
     this.myEnv = envelope(true); this.myEnv.material.color.setScalar(0.4); /* keeps the writing readable under the aisle light */ this.myEnv.rotation.set(-PI / 2 + 0.35, 0, PI); this.myEnv.position.set(0, 0.52, 0.27); this.myEnv.visible = false; you.root.add(this.myEnv);
-    this.coin = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.003, 20), new THREE.MeshStandardMaterial({ color: 0xd8c27a, metalness: 1, roughness: 0.3 }));
+    this.coin = pesoCoin(20);
     this.coin.visible = false; this.held.add(this.coin); this.coin.position.set(0.02, -0.16, -0.3); this.coin.rotation.set(1.2, 0, 0.3);
 
     // ---------- the boy ----------

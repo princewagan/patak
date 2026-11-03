@@ -274,6 +274,7 @@ export class Audio {
     [[0, 659.25], [.26, 880], [.52, 659.25], [.78, 987.77], [1.3, 659.25], [1.56, 880], [1.82, 659.25], [2.08, 987.77]].forEach(([dl, f]) => { this.tone(f, .34, { vol: .05, delay: dl + .1 }); this.tone(f * 3.9, .1, { vol: .009, delay: dl + .1 }); });
   }
   slam() { this.tone(82, .38, { vol: .52, to: 44 }); this.noiseHit(.16, { f: 1500, q: .6, vol: .2 }); this.noiseHit(.5, { f: 620, q: .5, vol: .1, a: .01 }); } // big word hits the screen
+  plateIn() { this.tone(96, .3, { vol: .42, to: 52 }); this.noiseHit(.13, { f: 1700, q: .6, vol: .16 }); this.noiseHit(.38, { f: 700, q: .5, vol: .08, a: .01 }); } // the second plate sliding in
   stampHit() { this.tone(118, .16, { vol: .56, to: 66 }); this.noiseHit(.07, { f: 820, q: .8, vol: .34 }); this.noiseHit(.05, { f: 2600, q: 1.2, vol: .12, delay: .012 }); } // rubber stamp on paper
   countUp() { this.tone(1320, .05, { vol: .035 }); this.tone(1980, .07, { vol: .02, delay: .03 }); }        // a number going up
   dayTick() { this.tone(640, .07, { vol: .06, to: 520 }); this.noiseHit(.03, { f: 1800, q: 1.5, vol: .05 }); }  // one day on the calendar
@@ -282,10 +283,13 @@ export class Audio {
   // ---------- main menu ----------
   titleDrop() { if (!this.ctx) return; this.drop(); this.piano(this._dropNote(), 5, .07, .04); }
   _dropNote() { const n = [220, 261.63, 196, 164.81, 220, 293.66, 246.94, 196]; this._dn = ((this._dn ?? -1) + 1) % n.length; return n[this._dn]; }
-  titleThunder() { // real thunder, kept down and softened so it sits behind the menu
+  titleThunder() { // real thunder right behind the flash: a crack, then the low roll under it
     if (!this.ctx) return;
-    const near = Math.random() < .5, delay = between(.35, 1.2);
-    if (!this.shot(near ? 'thunder1' : 'thunder2', { vol: near ? .2 : .17, lp: 2400, room: .22, pan: side(.4), delay })) this.noiseHit(3.4, { f: 120, type: 'lowpass', vol: .3, a: .32, delay, buf: this.brown });
+    const near = Math.random() < .62, delay = near ? between(.08, .32) : between(.45, 1);
+    const played = this.shot(near ? 'thunder1' : 'thunder2', { vol: near ? .78 : .62, lp: 7000, room: .32, pan: side(.35), delay });
+    if (!played) this.noiseHit(3.4, { f: 160, type: 'lowpass', vol: .7, a: .05, delay, buf: this.brown });
+    this.noiseHit(3, { f: 95, type: 'lowpass', vol: near ? .62 : .42, a: .06, delay: delay + .03, buf: this.brown });
+    this.layer('rain', .46, null, .5); setTimeout(() => { if (this.place == null) this.layer('rain', .76, null, 3); }, 2200); // rain drops back as the crash takes over
   }
   titleBed(on) {
     if (!this.ctx) return;

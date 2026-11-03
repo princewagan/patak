@@ -5,6 +5,7 @@ import { Person } from '../engine/person.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
+import { billMesh } from '../engine/money.js';
 import { animate, moveTo, walkPath } from '../engine/tween.js';
 
 /*
@@ -212,7 +213,8 @@ export default {
     G.add(weng.root); this.people.push(weng);
     const nb = this.neighbor = new Person({ h: 1.53, skin: 'light', top: 0x6d8fa6, bottom: 0x6d8fa6, skirt: true, hair: 'short', hairColor: 0x7d7770, build: 1.15 });
     G.add(nb.root); this.people.push(nb);
-    const bill = this.bill = box(0.075, 0.003, 0.038, new THREE.MeshStandardMaterial({ color: 0x8fae7e, roughness: 0.8 }));
+    const bill = this.bill = new THREE.Group();   // ₱200: two ₱100 notes
+    for (const i of [0, 1]) { const n = billMesh(100, 0.15); n.rotation.set(-PI / 2, 0, i * 0.12); n.position.y = i * 0.002; bill.add(n); }
     nb.arm.R.wr.add(bill); bill.position.set(0, -0.09, 0.02);
   },
 

@@ -18,7 +18,7 @@ export class IntroHud {
   name(big, sub) { this.$('.name b').textContent = big; this.$('.name span').textContent = sub; this.$('.name').classList.add('on'); }
   nameOff() { this.$('.name').classList.replace('on', 'off'); }
 
-  /** a rubber stamp comes down on the screen */
+  /** a second plate slides in from the other side */
   seal(big, sub) { this.$('.seal b').textContent = big; this.$('.seal span').textContent = sub; this.$('.seal').classList.add('on'); }
   sealOff() { this.$('.seal').classList.replace('on', 'off'); }
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { phoneModel, alarmScreen, ringScreen } from './phone.js';
 import { IntroHud } from '../engine/introhud.js';
+import { billMesh, pesoCoin } from '../engine/money.js';
 import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom } from '../engine/kit.js';
 import { Rain } from '../engine/rain.js';
@@ -35,17 +36,6 @@ function poloTex() {
     c.fillStyle = 'rgba(70,6,10,.6)'; c.fillRect(250, 112, 12, 104);
     c.fillStyle = '#efe6d4'; for (const y of [130, 168, 204]) { c.beginPath(); c.arc(256, y, 6, 0, 7); c.fill(); }
     c.fillStyle = '#f4f1e8'; c.fillRect(306, 170, 74, 34); c.fillStyle = '#7a1417'; c.font = 'bold 22px Inter'; c.textAlign = 'center'; c.fillText('CREW', 343, 195);  // name tag
-  });
-}
-
-function billTex(v) {
-  const col = v === 100 ? ['#7a6aa6', '#eee8ff'] : ['#b5413a', '#ffe9e6'];
-  return canvasTex(220, 96, (c, w, h) => {
-    c.fillStyle = col[0]; c.fillRect(0, 0, w, h);
-    c.fillStyle = 'rgba(255,255,255,.25)'; c.beginPath(); c.arc(160, 48, 30, 0, 7); c.fill();
-    c.strokeStyle = 'rgba(255,255,255,.25)'; c.lineWidth = 2; c.strokeRect(6, 6, w - 12, h - 12);
-    c.fillStyle = col[1]; c.font = 'bold 30px Inter'; c.fillText(String(v), 16, 40); c.font = 'bold 16px Inter'; c.fillText('PISO', 18, 78);
-    for (let i = 0; i < 200; i++) { c.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; c.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
   });
 }
 
@@ -192,13 +182,12 @@ export default {
     let x = -0.42, z = 0.62;
     for (const v of vals) {
       if (v >= 50) {
-        const b = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.062), new THREE.MeshStandardMaterial({ map: billTex(v), roughness: 0.85, side: THREE.DoubleSide }));
-        b.rotation.set(-PI / 2, 0, 0.2 + Math.random() * 0.2); b.position.set(x - 0.02, 0.114, z - 0.06); b.receiveShadow = true; b.castShadow = true;
+        const b = billMesh(v, 0.15);
+        b.rotation.set(-PI / 2, 0, 0.2 + Math.random() * 0.2); b.position.set(x - 0.02, 0.118, z - 0.06);
         this.money.add(b); x += 0.16;
       } else {
-        const r = v === 20 ? 0.0135 : v === 10 ? 0.0135 : v === 5 ? 0.0125 : 0.0115;
-        const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.0025, 20), new THREE.MeshStandardMaterial({ color: v >= 10 ? 0xd2bd84 : 0xbfc3c6, metalness: 1, roughness: 0.3 }));
-        c.position.set(x, 0.114, z + (Math.random() - 0.5) * 0.02); c.castShadow = true; this.money.add(c); x += 0.04;
+        const c = pesoCoin(v); c.rotation.y = Math.random() * 6;
+        c.position.set(x, 0.114, z + (Math.random() - 0.5) * 0.02); this.money.add(c); x += 0.04;
       }
     }
     this.money.children.forEach(m => (m.visible = false));
@@ -252,13 +241,13 @@ export default {
     await D.wait(0.75);
     H.name('IKAW', '22 · Service crew sa fast food sa Cubao'); audio.slam();
     await D.holdOrSkip(2.5);
-    H.seal('Contractual', 'Sa susunod na linggo malalaman kung ire-renew ka.'); audio.stampHit();
+    H.seal('Contractual', 'Sa susunod na linggo malalaman kung ire-renew ka.'); audio.plateIn();
     await D.holdOrSkip(3.4);
     H.nameOff(); H.sealOff();
 
     // the bed: everything you have until payday
-    E.dof({ focus: 0.68, aperture: 0.004 });
-    await rig.move({ pos: [-0.46, 0.98, 1.04], look: [-0.34, 0.11, 0.6], dur: 1.5, fov: 40, e: 'inOut' });
+    E.dof({ focus: 0.6, aperture: 0.0022 });
+    await rig.move({ pos: [-0.3, 0.62, 0.93], look: [-0.27, 0.115, 0.58], dur: 1.5, fov: 36, e: 'inOut' });
     const notes = this.money.children; let total = 0;
     const vals = [100, 50, 10];
     H.cash(0);
