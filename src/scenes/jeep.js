@@ -12,6 +12,7 @@ import { prewarm } from '../engine/prewarm.js';
 import { povArm } from './labas.js';
 import { JeepStop } from './jeepstop.js';
 import { preloadReal } from '../engine/realbody.js';
+import { Cloth } from '../engine/cloth.js';
 
 const D2R = THREE.MathUtils.degToRad;
 const PI = Math.PI;
@@ -205,8 +206,13 @@ export default {
     // ---------- the boy ----------
     const boy = this.boy = new Person({ real: 'boy', h: 1.24, skin: 'brown', top: 0x7d786c, bottom: 0x2e3238, hair: 'messy', build: 0.82, shorts: true, barefoot: true, sleeve: 0.12 });
     boy.root.position.set(0.1, -0.8, 4.2); J.add(boy.root); this.people.push(boy);
-    const ragM = std(0x6d6a63, { rough: 1 });
+    const ragM = std(0x8f897b, { rough: 1 });   // the same faded off-white as the cloth rag (engine/cloth.js)
     const rg = rag(ragM); rg.position.set(0, -0.07 * boy.s / 0.73, 0.012); boy.arm.R.wr.add(rg); this.rag = rg;
+    // the palm of his right hand, as a frame: +z along the fingers, +y out of the back of the hand (measured off the scanned hand)
+    { const Z = new THREE.Vector3(0.575, -0.704, 0.417).normalize(), Y = new THREE.Vector3(-0.765, -0.643, -0.03); Y.addScaledVector(Z, -Y.dot(Z)).normalize();
+      const palm = this.palm = new THREE.Object3D(); palm.position.set(0.018, -0.022, 0.013); palm.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(Y, Z), Y, Z)); boy.arm.R.wr.add(palm); }
+    // when he gets down to work the rag is a real cloth: held flat under the palm, the rest hanging, dragging over the shoe
+    this.cloth = new Cloth({ w: 0.2, h: 0.19, nx: 21, ny: 20 }); this.cloth.mesh.visible = false; J.add(this.cloth.mesh);
     // once the wiping is done it goes into the back of his waistband (it hangs from his hips, so it moves with them)
     const tk = this.ragTuck = tuckedRag(ragM); tk.position.set(-0.03 * boy.s, 0.045 * boy.s, -0.104 * boy.s); tk.rotation.set(0.2, PI, 0.06); tk.visible = false; boy.hips.add(tk);
     // the envelopes he's carrying: a real little pile, gripped upright in the left hand, thinner as he deals them out
@@ -273,6 +279,7 @@ export default {
     for (let i = 0; i < dp.count; i++) { const k = (t * (0.9 + this.dripSeed[i]) + this.dripSeed[i] * 7) % 1; dp.setY(i, 1.3 - k * k * 1.6); dp.setZ(i, dp.getZ(i) + this.speed * dt * 0.02 * (dp.getZ(i) > 2.1 ? -200 : 1)); }
     dp.needsUpdate = true;
     for (const p of this.people) p.update(dt, t);
+    if (this.cloth.mesh.visible) this.cloth.step(dt);
     if (this.atStop) { this.stop.group.position.z = this.offset - this.stopZ0; this.stop.update(dt, t); }
     // the head keeps following the boy down the aisle
     if (this.watch) { const w = this.watch, r = this.engine.rig; r.look.lerp(_w.copy(w.who.root.position).setY(w.y).add(this.jeep.position), 1 - Math.exp(-w.k * dt)); }
@@ -388,7 +395,7 @@ export default {
   },
 
   /** the rag in his fist, or tucked away in his waistband with his hand free */
-  tuck(on) { this.rag.visible = !on; this.ragTuck.visible = on; this.boy.grip('R', on ? 'rest' : 'hold'); },
+  tuck(on) { this.rag.visible = !on; this.ragTuck.visible = on; this.cloth.mesh.visible = false; this.boy.grip('R', on ? 'rest' : 'hold'); },
 
   /** the pile in his hand gets thinner and thicker with what's in it */
   pileCount(n) { this.pile.forEach((e, i) => (e.visible = i < n)); this.pileN = n; },
@@ -410,18 +417,76 @@ export default {
     audio.paper();
   },
 
-  /** he works the rag over the toe of each shoe in turn: the hand is on the shoe the whole time */
-  async wipe(p, dur = 2, farFirst = false) {
-    const boy = this.boy, s = p.spot, t = new THREE.Vector3(), back = s.f.clone(), side = new THREE.Vector3(-s.f.z, 0, s.f.x);
-    const a = farFirst ? s.shoeR : s.shoeL, b = farFirst ? s.shoeL : s.shoeR;
-    boy.reach('R', t, { rate: 11, pole: [-1, -0.6, -0.5] });
-    const dt0 = this.engine.time;
+  /** the toe of one of a rider's shoes, in jeep space: the top of the toe box, and a rounded box the rag can lie on
+      (measured off the scanned shoes, which sit a little into the floor: the toe box tops out about 5 cm over the toe bone) */
+  toeOf(p, k) {
+    const f = p.spot.f, R = p.real, J = this.jeep, c = new THREE.Vector3();
+    const toe = R?.foot[k].children.find(o => /Toe/.test(o.name));
+    if (toe) { toe.updateWorldMatrix(true, false); J.worldToLocal(c.setFromMatrixPosition(toe.matrixWorld)); c.addScaledVector(f, 0.02); c.y = Math.max(0.02, c.y + 0.05); }
+    else { c.copy(k === 'L' ? p.spot.shoeL : p.spot.shoeR).addScaledVector(f, -0.03); c.y = 0.06; }
+    return { c, box: c.clone().addScaledVector(f, -0.095).setY(c.y - 0.024), instep: c.clone().addScaledVector(f, -0.15).setY(c.y + 0.015) };
+  },
+
+  /**
+   * He works the rag over the toe of each shoe in turn, palm flat on the leather: quick short strokes along the shoe with a
+   * little circle in them, the shoulders going with the arm. Between the shoes the hand lifts and the rag swings across, and
+   * he shuffles over on his knees to reach the second one. The rag is a cloth (engine/cloth.js) the whole time.
+   */
+  async wipe(p, dur = 2, farFirst = false, { split = 0.5 } = {}) {
+    const boy = this.boy, J = this.jeep, f = p.spot.f, side = new THREE.Vector3(-f.z, 0, f.x), along = f.clone().negate();
+    const [a, b] = farFirst ? [this.toeOf(p, 'R'), this.toeOf(p, 'L')] : [this.toeOf(p, 'L'), this.toeOf(p, 'R')];
+    // the rag: flat under the palm and the fingers, its edge just showing past the fingertips, the rest hanging off round the toe
+    const C = this.cloth, dx = 0.2 / 20, dy = 0.19 / 19, pins = [];
+    for (let i = 8; i <= 12; i += 2) for (let j = 4; j <= 12; j += 2) { const z = (j - 4) * dy * 0.85 - 0.01; pins.push([i, j, (i - 10) * dx * 0.85, -0.014 - Math.max(0, z - 0.04) * 0.15, z]); }
+    C.solids = []; for (const t of [a, b]) C.solid(t.box, new THREE.Vector3(0.14, 0.03, 0.052), 0, 3).solid(t.instep, new THREE.Vector3(0.085, 0.07, 0.055), 0, 2.5);
+    C.hold(this.palm, pins); this.rag.visible = false; C.mesh.visible = true; C.reset(); boy.grip('R', 'open');
+    // a shoe too far over for his right hand: he shuffles across on his knees a little and turns his shoulders to it
+    // (side is his left; need is how far the toe is from his right shoulder, sideways)
+    const sh = new THREE.Vector3(); boy.arm.R.sh.getWorldPosition(sh); J.worldToLocal(sh);
+    const r0 = boy.root.position.clone(), lat = sh.clone().sub(r0).dot(side), need = t => t.c.clone().sub(r0).dot(side) - lat;
+    const rootFor = t => { const n = need(t); return r0.clone().addScaledVector(side, THREE.MathUtils.clamp(Math.sign(n) * Math.max(0, Math.abs(n) - 0.08) * 0.85, -0.12, 0.12)); };
+    const rA = rootFor(a), rB = rootFor(b), yA = THREE.MathUtils.clamp(need(a) * 1.3, -0.55, 0.55), yB = THREE.MathUtils.clamp(need(b) * 1.3, -0.55, 0.55);   // (only a little: his knees stay off the shoes)
+    // the palm's target, and which way it faces, every frame
+    const P = new THREE.Vector3(), out = new THREE.Vector3(), up = new THREE.Vector3();
+    const Z = new THREE.Vector3(), X = new THREE.Vector3(), q = new THREE.Quaternion(), qJ = new THREE.Quaternion(), Mb = new THREE.Matrix4();
+    let T = 0, amp = 0, ph = 0, yaw = 0, lean = 0, env = 0;
+    const W = 2 * PI * 2.1, Ts = split * dur, Tw = Math.min(0.32, dur * 0.3);   // strokes a second; when and how long he takes to move over
+    this.palm.getWorldPosition(P); this.palm.getWorldQuaternion(q);
+    // the arm aims the wrist, so the wrist goes where the palm has to be, less the palm's offset from it turned the way the hand will face
+    // (worked out from q, not read off the arm: mid-frame the arm is still in its plain pose)
+    const pInv = this.palm.quaternion.clone().invert(), qw = new THREE.Quaternion();
+    boy.reach('R', () => out.copy(this.palm.position).applyQuaternion(qw.copy(q).multiply(pInv)).negate().add(P), { rate: 10, pole: [-1, -0.35, -0.55], exact: true });
+    boy.aim('R', this.palm, () => q, { rate: 10 });
+    const prevAnim = boy.anim;
+    // while he works, the bend of his chest and neck goes into his back: he folds right down over the shoe, head low by your shins
+    boy.anim = (t, who) => {
+      const J0 = who.joints, ch = J0.chest.rotation, nk = J0.neck.rotation, k = 1 - env;
+      J0.spine.rotation.x += (ch.x + nk.x * 0.4) * env + lean + Math.sin(ph) * 0.045 * amp;
+      J0.spine.rotation.y += (ch.y + nk.y * 0.5) * env + yaw + Math.sin(ph + 0.4) * 0.06 * amp;
+      ch.set(ch.x * k, ch.y * k, ch.z * k); nk.set(nk.x * k, nk.y * k, nk.z * k);
+    };
     await animate((_, raw) => {
-      const m = THREE.MathUtils.smoothstep(raw, 0.44, 0.56), now = this.engine.time - dt0;
-      t.copy(a).lerp(b, m).addScaledVector(back, 0.075 + Math.sin(now * 5.5) * 0.02).addScaledVector(side, Math.sin(now * 13) * 0.042);
-      t.y = 0.135 + Math.abs(Math.sin(now * 13)) * 0.012;
+      T = raw * dur; ph = W * T;
+      const m = THREE.MathUtils.smootherstep(T, Ts - Tw, Ts + Tw), lift = Math.sin(PI * m) * 0.075, k0 = THREE.MathUtils.smoothstep(T, 0, 0.45);
+      amp = THREE.MathUtils.smoothstep(T, 0.15, 0.6) * (1 - THREE.MathUtils.smoothstep(T, dur - 0.35, dur)) * (1 - Math.sin(PI * m));
+      env = k0 * (1 - THREE.MathUtils.smoothstep(T, dur - 0.4, dur));   // the lean and the turn come and go with the work
+      boy.root.position.lerpVectors(r0, rA, k0).lerp(rB, m); yaw = (yA * (1 - m) + yB * m) * env; lean = D2R(30) * env;   // bent right over the shoe: down on his heels, the arm can only reach the toe with the chest low
+      // along the shoe and back, with a little circle in it; it drifts from the tip up toward the laces and back
+      const u = Math.sin(ph) * 0.025 * amp, v = Math.sin(ph * 0.5 + 1.1) * 0.013 * amp;
+      P.copy(a.c).lerp(b.c, m).addScaledVector(along, -0.018 + Math.sin(T * 1.7) * 0.008 + u).addScaledVector(side, v);
+      P.y = P.y - 12 * v * v + lift + (1 - Math.cos(ph)) * 0.002 * amp + 0.021;   // + the palm's own thickness and the rag, pressed down
+      const off = 1 - env; if (T > dur * 0.5 && off > 0) P.addScaledVector(along, -0.1 * off).y += 0.16 * off;   // done: the hand comes up off the shoe as he straightens
+      J.localToWorld(P);
+      // palm down, fingers up the shoe and turned in a little; the wrist rocks with each stroke
+      J.getWorldQuaternion(qJ); up.set(0, 1, 0).applyQuaternion(qJ);
+      Z.copy(along).applyAxisAngle(up.set(0, 1, 0), 0.35 + Math.sin(ph + 0.6) * 0.12 * amp).add(up.set(0, 0.12 - lift * 2.5, 0)).normalize().applyQuaternion(qJ);
+      up.set(0, 1, 0).applyQuaternion(qJ); X.crossVectors(up, Z).normalize(); up.crossVectors(Z, X);
+      q.setFromRotationMatrix(Mb.makeBasis(X, up, Z));
     }, dur, 'linear');
-    boy.reach('R', null, { rate: 8 });
+    boy.anim = prevAnim; yaw = 0; env = 0;
+    boy.reach('R', null, { rate: 7 }); boy.aim('R', null, { rate: 7 });
+    // done: the rag goes back into his fist and hangs from it
+    C.hold(this.palm, [[6, 6, 0, -0.01, 0.01], [7, 6, 0.008, -0.01, 0.01], [6, 7, 0, -0.01, 0.018], [7, 7, 0.008, -0.01, 0.018]]); boy.grip('R', 'hold');
   },
 
   /** the same two things at every seat: he leaves the envelope, then he wipes the shoes */
@@ -483,24 +548,32 @@ export default {
   },
   /** where your eyes go to read what's in your lap */
   lapLook() { return this.you.spot.lapJ.clone().add(new THREE.Vector3(-0.02, 0, 0)).toArray(); },
-  /** from your seat your own knees hide your feet, so we drop to the floor beside the shoe: rag, hand, shoe, his face behind them */
+  /** from your seat your own knees hide your feet, so we drop to the floor: rag and hand on your shoe up close, then up to his face */
   async yourShoes(D, line = true) {
     const boy = this.boy, you = this.you, s = you.spot, E = this.engine, rig = E.rig;
     this.cam([0.56, 1.06, 1.3], [0.2, 0.1, 1.3], 1.0, 44);
     const shoe = s.shoeR.clone(), far = s.shoeL.clone();
-    await walkPath(boy, [[shoe.x - 0.36, 0, (shoe.z + far.z) / 2 + 0.04]], 0.8);
+    await walkPath(boy, [[shoe.x - 0.32, 0, (shoe.z + far.z) / 2 + 0.04]], 0.8);   // knees just short of your toes
     boy.turnTo = PI / 2;
-    boy.pose('kneelDown'); boy.look(shoe, 0.7);
+    boy.pose('kneelDown'); boy.look(this.toeOf(you, 'L').c, 0.8);
     this.lowTo = 1.6; this.lowX = 0.2; this.lowY = 0.5;
-    await this.dwell(0.7);
-    const pov = rig.pov, sh = rig.shake, side = Math.sign(shoe.z - far.z) || 1;
-    rig.pov = 0; rig.shake = 0.25;
-    rig.set({ pos: [shoe.x - 0.2, 0.3, shoe.z + side * 0.5], look: [shoe.x - 0.14, 0.2, (shoe.z + far.z) / 2], fov: 44 });
-    rig.move({ pos: [shoe.x - 0.16, 0.27, shoe.z + side * 0.44], look: [shoe.x - 0.14, 0.19, (shoe.z + far.z) / 2], fov: 42, dur: 4, e: 'sine' });
-    E.dof({ focus: 0.5, aperture: 0.0014, maxblur: 0.005 });
-    const w = this.wipe(you, 3.6, true);
-    if (line) await D.say('', 'Pinunasan niya ang sapatos mo.', { hold: 2.8 });
+    await this.dwell(0.55);
+    // the hand is already on the first shoe when we cut down to it
+    const dur = 5.2, w = this.wipe(you, dur, false, { split: 0.6 });
+    await this.dwell(0.45);
+    const pov = rig.pov, sh = rig.shake, A = this.toeOf(you, 'L').c, B = this.toeOf(you, 'R').c;
+    rig.pov = 0; rig.shake = 0.14;
+    // low on the floor past the near shoe, his arm coming in from above: the rag working the leather fills the frame, slow push in
+    rig.set({ pos: [A.x + 0.06, 0.13, A.z + 0.42], look: [A.x - 0.005, 0.07, A.z - 0.01], fov: 36 });
+    rig.move({ pos: [A.x + 0.05, 0.118, A.z + 0.35], look: [A.x - 0.005, 0.068, A.z - 0.015], fov: 34, dur: 2.9, e: 'sine' });
+    E.dof({ focus: 0.4, aperture: 0.0018, maxblur: 0.006 });
+    if (line) D.say('', 'Pinunasan niya ang sapatos mo.', { hold: 2.8 });
+    await this.dwell(2.5);
+    // he moves over to the other shoe and we rise with him to his face, bent over the work
+    rig.move({ pos: [A.x - 0.2, 0.36, A.z + 0.46], look: [B.x - 0.17, 0.42, (A.z + B.z) / 2 - 0.02], fov: 40, dur: 2.4, e: 'inOut' });
+    E.dof({ target: boy.head, aperture: 0.0024, maxblur: 0.006 });
     await w;
+    await this.dwell(0.25);
     boy.pose('stand'); boy.look(null); boy.turnTo = null;
     this.tuck(true);   // into the back of his shorts
     rig.pov = pov; rig.shake = sh; E.dof({ focus: 0.72, aperture: 0.004 });
@@ -575,14 +648,18 @@ export default {
     this.jeep.localToWorld(end);
     E.dof({ focus: 0.65, aperture: 0.004 });
     await this.cam([0.64, 1.12, 1.3], this.lapLook(), 0.9, 40);
-    const c = this.coin; c.visible = true; arm.visible = true;
-    const place = (k, up) => { wr.copy(rest).lerp(end.clone().add(new THREE.Vector3(0.1, 0.1, 0.05)), k); elb.set(0.72, 0.62, 1.62); arm.reach(wr, elb, 1.2); c.position.copy(wr).add(new THREE.Vector3(-0.1, -0.03 - up * 0.05, -0.04)); c.rotation.set(0.6, 0, 0.3); this.jeep.worldToLocal(c.position); };
+    const c = this.coin; c.visible = true; arm.visible = true; arm.holds = 'pinch';   // the coin between your thumb and first finger
+    const place = (k, up) => {
+      wr.copy(rest).lerp(end.clone().add(new THREE.Vector3(0.1, 0.1, 0.05)), k); elb.set(0.72, 0.62, 1.62); arm.reach(wr, elb, 1.2);
+      if (arm.pinchPoint) arm.pinchPoint(c.position); else c.position.copy(wr).add(new THREE.Vector3(-0.1, -0.03 - up * 0.05, -0.04));
+      c.rotation.set(1.3, 0, 0.3); this.jeep.worldToLocal(c.position);
+    };
     await animate(k => place(k, 0), 0.8, 'inOut');
     await animate(k => place(1, k), 0.3, 'in');
     audio.coin(); c.visible = false;
     await this.dwell(0.25);
     await animate(k => place(1 - k, 1), 0.6, 'inOut');
-    arm.visible = false;
+    arm.visible = false; arm.holds = 'rest';
   },
   /** he takes the envelope off your lap himself, into the same hand as the rest */
   async takeBack() {
