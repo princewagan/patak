@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, glow, box, cyl, at, canvasTex, envFrom, blob, rand } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
+import { palmOn } from '../engine/realbody.js';
 import { Rain, Splashes } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
@@ -285,8 +286,10 @@ export default {
     purse.add(at(box(0.1, 0.065, 0.032, std(0x7a2d3a, { rough: 0.6 }), 0.014), 0, 0, 0));
     purse.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 16, PI), std(0xb8a77a, { metal: 0.8, rough: 0.3 })), 0, 0.033, 0));
     lola.spine.add(purse); purse.position.set(0, 0.02, 0.21); purse.rotation.x = 0.3;
-    this.purseL = new THREE.Object3D(); this.purseL.position.set(0.055, -0.02, -0.03); purse.add(this.purseL);
-    this.purseR = new THREE.Object3D(); this.purseR.position.set(-0.055, -0.02, -0.03); purse.add(this.purseR);
+    // her palms on its two ends, fingers round the front: palmOn puts the middle of each palm on these
+    this.purseL = new THREE.Object3D(); this.purseL.position.set(0.058, -0.004, -0.006); purse.add(this.purseL);
+    this.purseR = new THREE.Object3D(); this.purseR.position.set(-0.058, -0.004, -0.006); purse.add(this.purseR);
+    this.purseTop = new THREE.Object3D(); this.purseTop.position.set(-0.012, 0.05, 0.004); purse.add(this.purseTop);   // where her fingers go in for a coin
     const tindera = this.tindera = new Person({ real: 'tindera', h: 1.56, skin: 'tan', top: 0xb47f78, bottom: 0xb47f78, skirt: true, hair: 'bun', build: 1.12, belly: true });
     tindera.root.position.set(0.02, 0, -0.48); tindera.pose('standRelaxed', true); S.add(tindera.root); this.people.push(tindera);
     // her lista, the notebook of who owes what, lying on her side of the counter
@@ -372,9 +375,9 @@ export default {
   async showWallet(on) {
     const w = this.wallet, arm = this.arm, el = new THREE.Vector3(0.22, -0.46, -0.12);
     const place = k => { const y = -0.42 + 0.3 * k; w.position.set(0.035, y, -0.4); w.rotation.set(-0.55, 0.12, 0.06); arm.reach(new THREE.Vector3(0.07, y - 0.075, -0.37), el.clone().setY(el.y - (1 - k) * 0.2), 0.4); };
-    w.visible = arm.visible = true;
+    w.visible = arm.visible = true; arm.holds = 'hold';   // fingers closed round the wallet's edge
     await animate(k => place(on ? k : 1 - k), on ? 0.9 : 0.7, 'inOut');
-    if (!on) w.visible = arm.visible = false;
+    if (!on) { w.visible = arm.visible = false; arm.holds = 'rest'; }
   },
   /** your hand reaches out and puts coins down on the ledge next to hers, one by one */
   async putCoins(coins) {
@@ -384,8 +387,10 @@ export default {
       held.updateMatrixWorld(true); inv.copy(held.matrixWorld).invert();
       const spot = c.userData.home.clone().add(new THREE.Vector3(0.025, 0.06, 0.05)).applyMatrix4(inv), start = new THREE.Vector3(0.08, -0.3, -0.34);
       c.visible = true;
-      await animate(k => { wr.lerpVectors(start, spot, k); arm.reach(wr, el, 0.5); const p = wr.clone().add(new THREE.Vector3(-0.02, -0.04, -0.06)).applyMatrix4(held.matrixWorld); c.position.copy(p).lerp(c.userData.home, k * k); }, 0.75, 'inOut');
-      c.position.copy(c.userData.home); audio.coin();
+      // the coin between your thumb and finger, all the way down to the wood
+      arm.holds = 'pinch';
+      await animate(k => { wr.lerpVectors(start, spot, k); arm.reach(wr, el, 0.5); const p = arm.pinchPoint ? arm.pinchPoint(new THREE.Vector3()) : wr.clone().add(new THREE.Vector3(-0.02, -0.04, -0.06)).applyMatrix4(held.matrixWorld); c.position.copy(p).lerp(c.userData.home, k ** 6); c.rotation.x = (1 - k ** 6) * PI / 2; }, 0.75, 'inOut');
+      c.position.copy(c.userData.home); c.rotation.set(0, 0, 0); audio.coin(); arm.holds = 'rest';
       await animate(k => { wr.lerpVectors(spot, start, k); arm.reach(wr, el, 0.5); }, 0.5, 'inOut');
     }
     arm.visible = false;
@@ -400,16 +405,18 @@ export default {
     const tin = this.tindera, y = LEDGE + 0.0015, x0 = tin.root.position.x, z0 = tin.root.position.z, NEAR = [-0.04, -0.15], EDGE = 0.04;
     const xs = coins.map(c => c.position.x), z = coins.reduce((a, c) => a + c.position.z, 0) / coins.length;
     const xA = Math.min(...xs) - EDGE - 0.02, xB = Math.max(...xs) - EDGE + 0.01;
-    // the visible hand. The arm is solved for the wrist, so aim the wrist wherever puts the middle of the palm on the spot
-    const wr = tin.real ? tin.real.hand.L : tin.arm.L.wr, knuckle = tin.real?.group.getObjectByName('Bip01_L_Finger2');
-    const palm = new THREE.Vector3(), kn = new THREE.Vector3(), wrist = new THREE.Vector3(), aim = new THREE.Vector3();
-    const palmAt = () => { wr.getWorldPosition(palm); if (knuckle) palm.lerp(knuckle.getWorldPosition(kn), 0.5); return palm; };
-    const want = new THREE.Vector3(xA, LEDGE + 0.012, z);
-    const onPalm = () => { palmAt(); wr.getWorldPosition(wrist); return aim.copy(want).sub(palm).add(wrist); };
+    // the visible hand: the middle of her palm goes on the spot (palmOn), and the hand lies palm down with the fingers pointing
+    // out across the ledge, rolled a little onto its little-finger edge, which leads
+    const palm = new THREE.Vector3(), palmAt = () => tin.real ? tin.real.palm('L', palm) : tin.arm.L.wr.getWorldPosition(palm);
+    const want = new THREE.Vector3(xA, LEDGE + 0.014, z), onPalm = palmOn(tin, 'L', want);
+    const flat = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0)));
+    const edge = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -0.35).multiply(flat), handQ = edge.clone();
+    const frame = this.sweepFrame ??= new THREE.Object3D(); tin.arm.L.wr.add(frame);
+    tin.aim('L', frame, () => handQ, { rate: 10 });
     // she steps up to the window and leans in through the opening: from where she stands, her arm doesn't reach
     tin.look(new THREE.Vector3((xA + xB) / 2 + EDGE, LEDGE, z), 1); tin.set({ spine: [36, -8, 0] });
     tin.grip?.('L', 'open');
-    tin.reach('L', onPalm, { rate: 9, settle: 0.3 });
+    tin.reach('L', onPalm, { rate: 9 });
     await animate(k => { tin.root.position.x = x0 + (NEAR[0] - x0) * k; tin.root.position.z = z0 + (NEAR[1] - z0) * k; }, 0.4, 'inOut');
     await this.wait(0.15);
     // one stroke: a coin moves only once the edge of her hand gets to it, so they bunch up into a pile in front of it
@@ -419,7 +426,7 @@ export default {
       want.x = xA + (xB - xA) * k;
       const p = palmAt(), lead = p.x + EDGE;
       coins.forEach((c, i) => {
-        if (!pushed.includes(c) && c.position.x < lead && Math.abs(c.position.z - p.z) < 0.06) pushed.push(c);
+        if (!pushed.includes(c) && c.position.x < lead && Math.abs(c.position.z - p.z) < 0.09) pushed.push(c);
         if (!pushed.includes(c)) return;
         c.position.x = Math.max(c.position.x, lead + spread[i][0]);
         c.position.z += (p.z + spread[i][1] - c.position.z) * 0.2;
@@ -428,7 +435,7 @@ export default {
     }, 0.55, 'inOut');
     // her palm goes over the pile and closes on it
     const pile = coins.reduce((a, c) => a.add(c.position), new THREE.Vector3()).divideScalar(coins.length);
-    want.set(pile.x, LEDGE + 0.018, pile.z);
+    want.set(pile.x, LEDGE + 0.02, pile.z); handQ.copy(flat);
     await this.wait(0.18);
     tin.grip?.('L', 'fist');
     await this.wait(0.2);
@@ -436,16 +443,26 @@ export default {
     audio.tone(4800 + Math.random() * 600, 0.08, { vol: 0.02 });
     // she steps back, and her fist goes to the rim of the tin before it opens
     tin.look(this.lata.position, 1); tin.set({ spine: [12, 10, 0] });
-    tin.ik?.L?.off.set(0, 0, 0);   // the long correction was for the far reach, not this one
-    tin.reach('L', this.lata.position.clone().add(new THREE.Vector3(0, 0.16, 0)), { rate: 8, settle: 0.3 });
+    tin.aim('L', null, { rate: 6 });
+    tin.reach('L', palmOn(tin, 'L', this.lata.position.clone().add(new THREE.Vector3(0, 0.15, 0))), { rate: 8 });
     await animate(k => { tin.root.position.x = NEAR[0] + (x0 - NEAR[0]) * k; tin.root.position.z = NEAR[1] + (z0 - NEAR[1]) * k; }, 0.4, 'inOut');
     await this.wait(0.15);
+    // her hand opens over the tin and the coins drop out of it, one after another, into the tin
     tin.grip?.('L', 'open');
+    const from = tin.real ? tin.real.palm('L', new THREE.Vector3()) : tin.arm.L.wr.getWorldPosition(new THREE.Vector3()), into = this.lata.position;
+    coins.forEach((c, i) => { c.visible = true; c.position.copy(from).add(new THREE.Vector3((i % 3 - 1) * 0.008, -0.01 - i * 0.002, ((i * 5) % 3 - 1) * 0.008)); c.rotation.set(0.3 * i, 0, 0.5 * i); c.userData.fall = { p: c.position.clone(), d: i * 0.035 }; });
+    await animate(k => {
+      for (const c of coins) {
+        const f = c.userData.fall, t = THREE.MathUtils.clamp((k * 0.34 - f.d) / 0.2, 0, 1), y = Math.max(into.y + 0.02, f.p.y - 4.9 * (t * 0.2) ** 2);   // a free fall of 0.2 s
+        c.position.set(THREE.MathUtils.lerp(f.p.x, into.x, t * 0.8), y, THREE.MathUtils.lerp(f.p.z, into.z, t * 0.8));
+        if (t >= 1) c.visible = false;
+      }
+    }, 0.34);
     audio.coin();
     await this.wait(0.15);
-    for (const c of coins) { c.position.copy(c.userData.home); c.rotation.set(0, 0, 0); }
+    for (const c of coins) { c.visible = false; c.position.copy(c.userData.home); c.rotation.set(0, 0, 0); }
     tin.grip?.('L', 'rest'); tin.look(null);
-    tin.reach('L', null); tin.set({ spine: [0, 0, 0] });
+    tin.reach('L', null); tin.set({ spine: [0, 0, 0] }); frame.removeFromParent();
   },
   wait(s) { return new Promise(r => { let t = 0; const stop = this.engine.onUpdate((dt, _, raw) => { t += raw; if (t >= s) { stop(); r(); } }); }); },
 
@@ -455,7 +472,7 @@ export default {
     const cam = (pos, look, dur = 2.5, fov, e) => rig.move({ pos, look, dur, fov, e });
     if (S.wallet == null) S.wallet = 160;
     const C = cast(D); C.people({ 'Lola Ising': lola, Tindera: tin });
-    lola.reach('L', this.purseL, { rate: 30 }); lola.reach('R', this.purseR, { rate: 30 });
+    lola.reach('L', palmOn(lola, 'L', this.purseL), { rate: 30 }); lola.reach('R', palmOn(lola, 'R', this.purseR), { rate: 30 }); lola.grip('L', 'hold'); lola.grip('R', 'hold');
 
     cam([0.36, 1.58, 1.78], [0.0, 1.22, 0.0], 7, 42, 'out');
     await D.black(false, 1.6);
@@ -477,27 +494,33 @@ export default {
     lola.set({ neck: [32, 0, 0], spine: [14, 0, 0] });
     cam([0.58, 1.46, 1.38], [-0.02, LEDGE, 0.2], 2.0, 28);
     await D.wait(1.0);
-    { const hand = new THREE.Vector3(), pf = new THREE.Vector3();
+    { const above = new THREE.Vector3(), r = lola.real;
       for (const c of this.ledgeCoins) {
-        lola.reach('R', this.purseR, { rate: 12 });
-        await this.wait(0.3);
-        this.purse.getWorldPosition(pf); c.visible = true;
-        lola.reach('R', hand.copy(c.userData.home).add(new THREE.Vector3(-0.01, 0.07, 0.07)), { rate: 9 });
-        await animate(k => { c.position.lerpVectors(pf, c.userData.home, k); c.position.y += Math.sin(k * PI) * 0.03; }, 0.42, 'inOut');
-        c.position.copy(c.userData.home);
+        // her fingers go into the purse and come out with one coin between the thumb and the first finger
+        lola.grip('R', 'pinch'); lola.reach('R', palmOn(lola, 'R', this.purseTop), { rate: 12 });
+        await this.wait(0.32);
+        c.visible = true; c.rotation.set(PI / 2, 0, 0.4);
+        const carry = this.engine.onUpdate(() => { if (r) r.pinch('R', c.position); else lola.arm.R.wr.getWorldPosition(c.position); });
+        lola.reach('R', palmOn(lola, 'R', above.copy(c.userData.home).add(new THREE.Vector3(0, 0.045, 0.01))), { rate: 9 });
+        await this.wait(0.42);
+        // down on the wood: it leaves her fingers as they open, and lies flat
+        carry(); lola.grip('R', 'cup');
+        const p0 = c.position.clone(), r0 = c.rotation.x;
+        await animate(k => { c.position.lerpVectors(p0, c.userData.home, k * k); c.rotation.x = r0 * (1 - k); }, 0.16);
+        c.position.copy(c.userData.home); c.rotation.set(0, 0, 0);
         audio.tone(5200 + Math.random() * 800, 0.18, { vol: 0.035 }); audio.tone(3600, 0.12, { vol: 0.02 });
       }
-      lola.reach('R', this.purseR, { rate: 8 }); }
+      lola.reach('R', palmOn(lola, 'R', this.purseR), { rate: 8 }); lola.grip('R', 'hold'); }
     await D.say('', 'Binilang ni Lola ang barya niya. ₱40 lang. Kulang ng ₱18.');
     lola.expression({ sad: 0.6 }); lola.set({ neck: [40, 0, 0] });
     await D.say('Lola Ising', 'Kalahati na lang pala.');
 
     // the lista: she puts her hand flat on it
     E.dof({ target: tin.head, aperture: 0.005 });
-    tin.reach('R', this.lista.position.clone().add(new THREE.Vector3(0, 0.05, 0.02)), { rate: 6 }); tin.set({ spine: [10, 0, 0] });
+    tin.grip('R', 'open'); tin.reach('R', palmOn(tin, 'R', this.lista.position.clone().add(new THREE.Vector3(0, 0.012, 0.02))), { rate: 6 }); tin.set({ spine: [10, 0, 0] });
     cam([0.36, 1.6, 1.6], [0.1, 1.38, -0.55], 1.8, 36);
     await D.say('Tindera', "Pasensya na po, 'La. Puno na po 'yung lista n'yo.");
-    tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
+    tin.reach('R', null); tin.grip('R', 'rest'); tin.set({ spine: [0, 0, 0] });
 
     // Lola, half-turned, in silhouette against the bulb
     lola.set({ neck: [22, 35, 0], spine: [14, 0, 0] });
@@ -526,24 +549,25 @@ export default {
       // she scoops it out of the sack below the counter and sets it down in the opening
       tin.look(null); tin.set({ spine: [34, 0, 0] }); tin.reach('R', new THREE.Vector3(0.15, 0.62, -0.35), { rate: 5 });
       await D.wait(1.0);
-      bag.visible = true; tin.arm.R.wr.add(bag); bag.position.set(0, -0.2, 0.03); bag.rotation.set(0, 0, 0);
+      bag.visible = true; tin.arm.R.wr.add(bag); bag.position.set(0, -0.2, 0.03); bag.rotation.set(0, 0, 0); tin.grip('R', 'hold');
       tin.set({ spine: [10, 0, 0] }); tin.reach('R', new THREE.Vector3(-0.02, LEDGE + 0.26, -0.02), { rate: 4 });
       await D.wait(1.0);
       this.scene.attach(bag); audio.paper();
       await animate(k => { bag.position.y += (LEDGE + 0.002 - bag.position.y) * k; bag.rotation.set(0, 0.3 * k, 0); }, 0.3, 'out');
       bag.position.set(-0.02, LEDGE + 0.002, 0.06);
-      tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
+      tin.reach('R', null); tin.grip('R', 'rest'); tin.set({ spine: [0, 0, 0] });
     };
     // Lola takes the bag in both hands and holds it against her
     const takeBag = async bag => {
       lola.set({ spine: [20, 0, 0] });
-      lola.reach('L', bag.position.clone().add(new THREE.Vector3(0.06, 0.08, 0.04)), { rate: 7 }); lola.reach('R', bag.position.clone().add(new THREE.Vector3(-0.06, 0.08, 0.04)), { rate: 7 });
+      lola.grip('L', 'hold'); lola.grip('R', 'hold');
+      lola.reach('L', palmOn(lola, 'L', bag.position.clone().add(new THREE.Vector3(-0.075, 0.07, 0.01))), { rate: 7 }); lola.reach('R', palmOn(lola, 'R', bag.position.clone().add(new THREE.Vector3(0.075, 0.07, 0.01))), { rate: 7 });
       await D.wait(0.7);
       lola.spine.attach(bag); audio.paper();
       const p0 = bag.position.clone(), q0 = bag.quaternion.clone(), p1 = new THREE.Vector3(0, -0.05, 0.2), q1 = new THREE.Quaternion();
       this.purse.visible = false;   // it went into her pocket while her hands were on the bag
       const hl = new THREE.Object3D(), hr = new THREE.Object3D(); hl.position.set(0.07, 0.07, 0.03); hr.position.set(-0.07, 0.04, 0.05); bag.add(hl, hr);
-      lola.reach('L', hl, { rate: 6 }); lola.reach('R', hr, { rate: 6 });
+      lola.reach('L', palmOn(lola, 'L', hl), { rate: 6 }); lola.reach('R', palmOn(lola, 'R', hr), { rate: 6 });
       lola.set({ spine: [8, 0, 0] });
       await animate(k => { bag.position.lerpVectors(p0, p1, k); bag.quaternion.slerpQuaternions(q0, q1, k); }, 0.8, 'inOut');
       this.lolaBags.push(bag); return { hl, hr };
@@ -570,14 +594,14 @@ export default {
       lola.eyeUp = 0.2;
       const palm = new THREE.Vector3(), t0 = performance.now();
       const offer = () => { const t = (performance.now() - t0) / 1000; return lola.root.localToWorld(palm.set(-0.05 + Math.sin(t * 5.3) * 0.002, 0.94 + Math.sin(t * 6.1 + 1) * 0.002 + Math.sin(t * 0.7) * 0.006, 0.36)); };
-      lola.reach('R', offer, { rate: 2.5, twist: -70, wrist: [30, 0, 0] });
+      lola.reach('R', offer, { rate: 2.5, twist: -70, wrist: [30, 0, 0] }); lola.grip('R', 'open'); lola.grip('L', 'hold');
       E.dof({ target: lola.head, aperture: 0.004 });
       await cam([0.46, 1.56, 1.92], [0.16, 1.07, 1.13], 1.4, 42);
       rig.move({ pos: [0.45, 1.55, 1.9], dur: 0.3 });
       audio.chord([196, 246.94, 293.66], 0.12, 0.08);
       await D.say('Lola Ising', 'Pagpalain ka ng Diyos, iho.');
       D.patak('Lola Ising', 'isang kilo ang naiuwi');
-      lola.reach('R', null, { rate: 3 }); lola.eyeUp = 0;
+      lola.reach('R', null, { rate: 3 }); lola.grip('R', 'rest'); lola.eyeUp = 0;
       lola.set({ spine: [16, 0, 0], chest: [6, 0, 0], neck: [-4, 0, 0] });
       // she walks off under the street lamp with it
       lola.expression({});
@@ -595,11 +619,11 @@ export default {
       // your canton comes out the same way
       tin.set({ spine: [30, 0, 0] }); tin.reach('R', new THREE.Vector3(0.3, 0.7, -0.4), { rate: 5 });
       await D.wait(0.8);
-      this.canton.visible = true; tin.arm.R.wr.add(this.canton); this.canton.position.set(0, -0.08, 0.03);
+      this.canton.visible = true; tin.arm.R.wr.add(this.canton); this.canton.position.set(0, -0.08, 0.03); tin.grip('R', 'hold');
       tin.set({ spine: [8, 0, 0] }); tin.reach('R', new THREE.Vector3(0.12, LEDGE + 0.15, 0.1), { rate: 4 });
       await D.wait(0.9);
       this.scene.attach(this.canton); this.canton.position.set(0.12, LEDGE, 0.14); this.canton.rotation.set(0, 0.3, 0); audio.paper();
-      tin.reach('R', null); tin.set({ spine: [0, 0, 0] });
+      tin.reach('R', null); tin.grip('R', 'rest'); tin.set({ spine: [0, 0, 0] });
       E.dof({ focus: 1.2, aperture: 0.005 });
       await D.say('', 'Binayaran mo ang pancit canton mo.');
       // half a kilo for Lola
@@ -627,7 +651,7 @@ export default {
     lola.root.position.set(0.02, 0, 0.74); lola.root.rotation.y = PI; lola.walk = 0;
     lola.pose('stoop', true); lola.set({ shR: [-34, 0, -10], elR: [-70, 0, 0] }, true); lola.expression({});
     for (const b of this.lolaBags) { b.removeFromParent(); b.visible = false; } this.lolaBags = []; this.purse.visible = true;
-    lola.reach('L', this.purseL, { rate: 30 }); lola.reach('R', this.purseR, { rate: 30 });
+    lola.reach('L', palmOn(lola, 'L', this.purseL), { rate: 30 }); lola.reach('R', palmOn(lola, 'R', this.purseR), { rate: 30 }); lola.grip('L', 'hold'); lola.grip('R', 'hold');
     for (const c of [...this.ledgeCoins, ...this.myCoins]) c.visible = false;
     this.bagFull.visible = this.bagHalf.visible = this.canton.visible = false;
     E.dof({ target: this.board, aperture: 0.005 });

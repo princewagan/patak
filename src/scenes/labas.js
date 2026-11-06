@@ -3,6 +3,7 @@ import { prewarm } from '../engine/prewarm.js';
 import { pbr, std, box, cyl, at, blob, canvasTex, envFrom, tex, rand } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
 import { handGeometry, gripGeometry, GRIP } from '../engine/body.js';
+import { realPovArm } from '../engine/povreal.js';
 import { Rain } from '../engine/rain.js';
 import { audio } from '../engine/audio.js';
 import { animate, walkPath } from '../engine/tween.js';
@@ -386,6 +387,7 @@ export function sedan() {
 
 /** your own forearm, first person. reach() and press() take world positions. Used by car.js and jeep.js too. */
 export function povArm({ left = false } = {}) {
+  const real = realPovArm({ left }); if (real) return real;   // the scanned arm, when its body is loaded
   const skin = new THREE.MeshPhysicalMaterial({ color: 0xa98a78, roughness: 0.55, sheen: 0.25, sheenColor: new THREE.Color(0xff9a7a) });
   const G = new THREE.Group(), fore = new THREE.Group(); G.add(fore);
   const pts = []; for (let i = 0; i <= 14; i++) { const t = i / 14; pts.push(new THREE.Vector2(0.024 + 0.024 * Math.sin(Math.min(1, t * 1.5) * PI / 2) + (t > 0.7 ? (t - 0.7) * 0.03 : 0), t * 0.62)); }

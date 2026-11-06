@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { pbr, tex, std, glow, box, cyl, at, canvasTex, envFrom, blob } from '../engine/kit.js';
 import { Person } from '../engine/person.js';
+import { palmOn } from '../engine/realbody.js';
 import { audio } from '../engine/audio.js';
 import { cast } from '../engine/cast.js';
 import { billMesh } from '../engine/money.js';
@@ -442,7 +443,7 @@ export default {
     { // she lifts the clipboard off the counter and holds it against her forearm
       const c = this.clip, sp = joy.spine; sp.attach(c); audio.paper();
       const p0 = c.position.clone(), q0 = c.quaternion.clone(), p1 = new THREE.Vector3(0.06, 0.0, 0.24), q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.95, 0, 0.14));
-      joy.reach('L', this.clipL, { rate: 10 });
+      joy.reach('L', palmOn(joy, 'L', this.clipL), { rate: 10 }); joy.grip('L', 'hold');
       animate(k => { c.position.lerpVectors(p0, p1, k); c.quaternion.slerpQuaternions(q0, q1, k); }, 0.8, 'inOut');
     }
     joy.look(weng.head, 1);
@@ -496,7 +497,7 @@ export default {
       joy.look(this.receipt, 0.9); joy.turnTo = 0.7; joy.set({ spine: [22, 0, 0] });
       joy.reach('R', this.receipt.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.07, -0.05)), { rate: 7 });
       await D.wait(0.75);
-      { const r = this.receipt, w = joy.arm.R.wr; w.attach(r); audio.paper();
+      { const r = this.receipt, w = joy.arm.R.wr; w.attach(r); audio.paper(); joy.grip('R', 'pinch');
         const p0 = r.position.clone(), q0 = r.quaternion.clone(), q1 = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, PI, 0));
         animate(k => { r.position.lerpVectors(p0, new THREE.Vector3(0.0, -0.13, 0.03), k); r.quaternion.slerpQuaternions(q0, q1, k); }, 0.5, 'inOut'); }
       joy.set({ spine: [2, 0, 0] });
@@ -551,7 +552,13 @@ export default {
       weng.anim = (t, p) => { p.arm.R.wr.rotation.z = Math.sin(t * 18) * 0.25; p.arm.R.el.rotation.y = Math.sin(t * 2.4) * 0.12; };
       this.pen.removeFromParent(); this.scene.add(this.pen); this.pen.visible = true;
       const penDir = new THREE.Vector3(0.18, 0.9, -0.4).normalize(), tip = new THREE.Vector3(), grip = new THREE.Vector3();
-      weng.reach('R', grip, { rate: 16, wrist: [0, 0, 0] });
+      // the pen between her thumb and first finger, the hand palm down and rolled onto its little-finger side, the way one writes
+      const write = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.3)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.55))
+        .multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(1, 0, 0))));
+      const wf = new THREE.Object3D(); weng.arm.R.wr.add(wf);
+      weng.grip('R', 'pinch'); weng.aim('R', wf, write, { rate: 14 });
+      weng.reach('R', palmOn(weng, 'R', grip, 'pinch'), { rate: 16 });
       this.pen.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), penDir);
       this.slip.updateMatrixWorld(true);
       await animate(k => {
@@ -559,9 +566,9 @@ export default {
         const px = 315 + k * 240, py = 335 + Math.sin(k * 22) * 13 * (1 - k * 0.5) - Math.sin(k * 5) * 6;
         tip.set((px / 640 - 0.5) * 0.21, (0.5 - py / 420) * 0.14, 0.004); this.slip.localToWorld(tip);
         this.pen.position.copy(tip).addScaledVector(penDir, 0.066);
-        grip.copy(tip).addScaledVector(penDir, 0.075).add(_r.set(-0.02, 0.05, 0.05));
+        grip.copy(tip).addScaledVector(penDir, 0.028);
       }, 2.2, 'linear');
-      weng.anim = null; weng.reach('R', null);
+      weng.anim = null; weng.reach('R', null); weng.aim('R', null); weng.grip('R', 'rest'); wf.removeFromParent();
       await D.say('', 'Pinirmahan ni Ate Weng ang kaltas.');
       // break corner: she sits alone, texting
       await D.black(true, 0.7);

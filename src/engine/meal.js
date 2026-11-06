@@ -205,7 +205,8 @@ export function monobloc(color = 0xe7e4dc) {
 export function sitY(person, seat = 0.44) { const s = person.s; return (seat + 0.045 * s - person.C.hipsY * s) / 0.79; }
 
 /* ---------------- holding things ---------------- */
-const _hA = new THREE.Vector3(), _hQ = new THREE.Quaternion(), _hQ2 = new THREE.Quaternion();
+const _hA = new THREE.Vector3(), _hQ = new THREE.Quaternion(), _hQ2 = new THREE.Quaternion(), _hP = new THREE.Vector3(), _hS = new THREE.Vector3();
+const _hB = new THREE.Vector3(), _hC = new THREE.Vector3(), _hM = new THREE.Matrix4(), _hM2 = new THREE.Matrix4(), _fit = Array.from({ length: 19 }, () => new THREE.Vector3());
 /** where a hand has to be so that the point `local` of a thing it holds (a child of that hand) lands at `at`, with the thing turned to q */
 export function handTarget(prop, local, at, q, out = new THREE.Vector3()) {
   const inHand = _hA.copy(local).applyQuaternion(prop.quaternion).add(prop.position);
@@ -249,21 +250,46 @@ export class Eater {
     this.on = false; this.done = 0; this.last = -1;
   }
 
-  /** where a point on a held thing is, given where the thing has to be and how it faces: the hand target */
+  /** where a point on a held thing is, given where the thing has to be and how it faces: the hand target.
+      A wrist only turns so far, so once the thing has been drawn the hand is placed for the way it really faces (last frame), not the way it was asked to:
+      the tip then lands where it should even when the wrist can't quite turn it */
   handFor(prop, at, q, out) {
     const local = this._b.copy(prop.userData.tip).applyQuaternion(prop.quaternion).add(prop.position);   // the point, in the hand's space
-    return out.copy(local).applyQuaternion(this._q2.copy(q).multiply(this._q.copy(prop.quaternion).invert())).negate().add(at);
+    const seen = prop.userData.seenQ;
+    return out.copy(local).applyQuaternion(this._q2.copy(seen && this.frames > 2 ? seen : q).multiply(this._q.copy(prop.quaternion).invert())).negate().add(at);
+  }
+
+  /**
+   * Seat a held thing in the scanned fingers, the way a spoon is really held: pinched between the thumb tip and the first two
+   * fingertips, the handle running back over the web of the thumb, the hollow up toward the thumb. Read from the last frame
+   * drawn (the fingers and the hand were placed together), so it follows the fingers as they close and never cuts through them.
+   */
+  fit(prop, S) {
+    const R = this.p.real, B = this.bones ??= {}, at = (n, v) => v.setFromMatrixPosition((B[S + n] ??= R.group.getObjectByName(`Bip01_${S}_${n}`)).matrixWorld);
+    const [w, t1, t2, i1, i2, i3, m1, m2, m3, l1, tT, tI, tM, along, across, palm, pinch, web, up] = _fit;
+    at('Hand', w); at('Finger01', t1); at('Finger02', t2); at('Finger1', i1); at('Finger11', i2); at('Finger12', i3);
+    at('Finger2', m1); at('Finger21', m2); at('Finger22', m3); at('Finger4', l1);
+    tT.subVectors(t2, t1).multiplyScalar(0.7).add(t2);              // the tips are past the last joints
+    tI.subVectors(i3, i2).multiplyScalar(0.6).add(i3); tM.subVectors(m3, m2).multiplyScalar(0.6).add(m3);
+    along.subVectors(m1, w).normalize(); across.subVectors(i1, l1).normalize();   // toward the fingers; toward the thumb
+    palm.crossVectors(along, across).normalize(); if (palm.dot(_hA.subVectors(tI, i1)) < 0) palm.negate();   // the fingers curl to the palm
+    pinch.lerpVectors(tI, tM, 0.35).lerp(tT, 0.5);
+    web.lerpVectors(t1, i1, 0.5).addScaledVector(palm, -0.012 * this.p.s);   // the web of the thumb, on the back of the hand
+    const z = _hB.subVectors(pinch, web).normalize();
+    up.copy(across).addScaledVector(palm, -0.5).addScaledVector(z, -up.dot(z)).normalize();
+    _hM.makeBasis(_hC.crossVectors(up, z), up, z).setPosition(pinch.addScaledVector(z, -0.01));
+    _hM.premultiply(_hM2.copy(prop.parent.matrixWorld).invert()).decompose(prop.position, prop.quaternion, _hS);
   }
 
   /** spoon and fork back in the hands that hold them */
   hold() { for (const [o, hand, pos, q] of this.held) { hand.add(o); o.position.copy(pos); o.quaternion.copy(q); } }
 
   start(t0 = 0) {
-    const p = this.p; this.on = true; this.t0 = t0; this.hold();
+    const p = this.p; this.on = true; this.t0 = t0; this.hold(); this.frames = 0;
     p.grip('R', 'pinch'); p.grip('L', 'pinch');
     const hR = new THREE.Vector3(), hL = new THREE.Vector3();
-    p.reach('R', () => this.handFor(this.spoon, this.B, this.qS, hR), { rate: 30, pole: [-0.9, -1, -0.5] });
-    p.reach('L', () => this.handFor(this.fork, this.F, this.qF, hL), { rate: 30, pole: [0.9, -1, -0.5] });
+    p.reach('R', () => this.handFor(this.spoon, this.B, this.qS, hR), { rate: 30, pole: [-0.9, -1, -0.5], exact: true });
+    p.reach('L', () => this.handFor(this.fork, this.F, this.qF, hL), { rate: 30, pole: [0.9, -1, -0.5], exact: true });
     p.aim('R', this.spoon, () => this.qS, { rate: 30, bend: 1.1, roll: 1.7 });
     p.aim('L', this.fork, () => this.qF, { rate: 30, bend: 1.1, roll: 1.7 });
     p.anim = (t, q, dt) => this.tick(t, dt);
@@ -275,6 +301,10 @@ export class Eater {
   }
 
   tick(t) {
+    // how the spoon and fork really faced in the last frame drawn (their world matrices still hold it: nothing has redrawn the arm yet)
+    this.frames++;
+    for (const k of [this.spoon, this.fork]) k.matrixWorld.decompose(_hP, k.userData.seenQ ??= new THREE.Quaternion(), _hS);
+    if (this.frames > 3 && this.p.real) { this.fit(this.spoon, 'R'); this.fit(this.fork, 'L'); }
     const p = this.p, root = p.root, fwd = this._a.set(Math.sin(root.rotation.y), 0, Math.cos(root.rotation.y));
     const left = new THREE.Vector3(fwd.z, 0, -fwd.x);   // the person's own left
     const pl = this.plate.getWorldPosition(new THREE.Vector3()), top = pl.y + 0.0045;

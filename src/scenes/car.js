@@ -466,7 +466,7 @@ export default {
     if (this.onWheel) {
       this.wheel.rotation.z = Math.sin(t * 0.7) * 0.05 + Math.sin(t * 1.9) * 0.012;
       this.wheel.updateWorldMatrix(true, false);
-      for (const [arm, a, e] of [[this.armL, -1.15, [-0.3, -0.6, 0.06]], [this.armR, 1.15, [0.3, -0.6, 0.06]]]) {
+      for (const [arm, a, e] of [[this.armL, -0.98, [-0.3, -0.6, 0.06]], [this.armR, 0.98, [0.3, -0.6, 0.06]]]) {   // ten to two, where you see your knuckles over the rim
         _w.set(Math.sin(a) * WHEEL_R, Math.cos(a) * WHEEL_R, 0); this.wheel.localToWorld(_w);
         _u.set(Math.cos(a), -Math.sin(a), 0).multiplyScalar(-Math.sign(a)).transformDirection(this.wheel.matrixWorld);   // along the rim, toward the top
         arm.grip(_w, _u, _e.set(...e));

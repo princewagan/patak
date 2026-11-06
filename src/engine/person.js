@@ -198,10 +198,25 @@ export class Person {
       root.updateMatrixWorld(true);
       root.traverse(n => { if (n.isMesh && !n.userData.keep) n.visible = false; });
       this.real = new RealBody(this, rec, { ...o.realOpts, role: o.real }); root.add(this.real.group);
+      this.fitArms();
       // the procedural cap never fit a real head: it sat across the face. The real body wears its own.
       root.traverse(n => { if (n.userData.keep) n.visible = false; });
       if (o.cap) this.real.wearCap(o.cap, o.capOpts);
     }
+  }
+
+  /** the scanned arms are shorter than the puppet's and hang from further back. Give the puppet the scan's own shoulders and
+      bone lengths, so the arm it solves is the arm you see: a hand then lands where it is sent, with no dragging and no bent wrist */
+  fitArms() {
+    this.root.updateMatrixWorld(true); this.real.sync(); this.real.group.updateMatrixWorld(true);
+    for (const side of ['L', 'R']) {
+      const arm = this.arm[side], up = this.real.upper[side], fo = up.children.find(c => c.isBone), hd = this.real.hand[side];
+      const a = up.getWorldPosition(new THREE.Vector3()), b = fo.getWorldPosition(new THREE.Vector3()), c = hd.getWorldPosition(new THREE.Vector3());
+      const sp = arm.sh.parent, k = sp.getWorldScale(new THREE.Vector3()).x;
+      arm.sh.position.copy(sp.worldToLocal(a.clone()));
+      arm.el.position.y = -a.distanceTo(b) / k; arm.wr.position.y = -b.distanceTo(c) / k;
+    }
+    this.armsFit = true; this.root.updateMatrixWorld(true);
   }
 
   collect() {
@@ -246,12 +261,14 @@ export class Person {
    * returning one, read every frame), reach('R', null) to let go. The arm is solved each frame, so the hand really arrives,
    * whatever the body is doing. The weight eases in and out, so it never snaps. o: { rate, w, wrist: [x,y,z] degrees,
    * pole: [x,y,z] where the elbow should point, in the person's own space,
-   * settle: how far in metres the scanned arm may shift its aim to land the visible hand, default 0.14 }
+   * settle: how far in metres the scanned arm may shift its aim to land the visible hand, default 0.14,
+   * exact: solve on the scanned arm itself (its own shoulder and bone lengths), so the visible hand lands with no settling
+   * lag and the elbow bends the way that arm really would. For hands that must hit a point every frame, like a spoon to a mouth }
    */
   reach(side, target, o = {}) {
     const ik = this.ik ??= {}, a = ik[side] ??= { w: 0, goal: 0, off: new THREE.Vector3(), target: null };
     if (target == null) { a.goal = 0; a.rate = o.rate ?? 6; return this; }
-    a.target = target; a.goal = o.w ?? 1; a.rate = o.rate ?? 6; a.wrist = o.wrist ?? null; a.pole = o.pole ?? null; a.twist = o.twist ?? 0; a.settle = o.settle ?? 0.14;
+    a.target = target; a.goal = o.w ?? 1; a.rate = o.rate ?? 6; a.wrist = o.wrist ?? null; a.pole = o.pole ?? null; a.twist = o.twist ?? 0; a.settle = o.settle ?? 0.14; a.exact = !!(o.exact && this.real);
     return this;
   }
 
@@ -267,9 +284,15 @@ export class Person {
       const tw = _ikT; if (raw.isVector3) tw.copy(raw); else raw.getWorldPosition(tw);
       a.world = (a.world ??= new THREE.Vector3()).copy(tw);
       _ikM.copy(sp.matrixWorld).invert();
+      const X = a.exact && this.realArm(side);
       const d = _ikD.copy(tw).applyMatrix4(_ikM).add(a.off).sub(arm.sh.position);
-      const ua = -arm.el.position.y, fa = -arm.wr.position.y, reach = (ua + fa) * 0.985;
-      const L = THREE.MathUtils.clamp(d.length(), Math.abs(ua - fa) + 0.02, reach);
+      if (X) d.sub(X.sh);   // from the shoulder you see, not the puppet's
+      // a hand holding something has its wrist moved onto the scanned hand every frame (realbody.sync), so the forearm's own length is the one it was built with
+      const ua = X ? X.ua : -arm.el.position.y, fa = X ? X.fa : -(arm.wr.userData.rest ?? arm.wr.position).y, reach = (ua + fa) * 0.985;
+      // near full stretch the elbow angle swings hard for a tiny change in distance, so the last 10% of the reach is eased
+      // (soft IK): the arm straightens gradually instead of locking straight and then snapping bent
+      const soft = reach * 0.9, dl = d.length();
+      const L = Math.max(Math.abs(ua - fa) + 0.02, dl <= soft ? dl : soft + (reach - soft) * (1 - Math.exp((soft - dl) / (reach - soft))));
       const e = Math.PI - Math.acos(clamp((ua * ua + fa * fa - L * L) / (2 * ua * fa), -1, 1));
       const dir = _ikN.copy(d).normalize();
       const w0 = _ikW.set(0, -ua - fa * Math.cos(e), fa * Math.sin(e)).normalize();
@@ -325,10 +348,28 @@ export class Person {
     }
   }
 
+  /** the scanned arm's own lengths, and where its shoulder sits from the puppet's (in the shoulder's parent space, kept up to date by settleArms) */
+  realArm(side) {
+    const X = (this._realArm ??= {})[side] ??= (() => {
+      const up = this.real.upper[side], fo = up.children.find(c => c.isBone), hd = this.real.hand[side];
+      hd.updateWorldMatrix(true, false);
+      const a = up.getWorldPosition(new THREE.Vector3()), b = fo.getWorldPosition(new THREE.Vector3()), c = hd.getWorldPosition(new THREE.Vector3());
+      return { ua: a.distanceTo(b), fa: b.distanceTo(c), sh: new THREE.Vector3(), seen: false };
+    })();
+    return X.seen ? X : null;
+  }
+
   /** the scanned arm is not quite the puppet's length: nudge the aim by what's left over, so the visible hand lands on the spot */
   settleArms() {
     for (const side of ['L', 'R']) {
-      const a = this.ik[side]; if (!a || !a.world || a.w < 0.5) continue;
+      const a = this.ik[side]; if (!a || !a.world) continue;
+      if (a.exact) {
+        this.realArm(side); const X = this._realArm[side], arm = this.arm[side], sp = arm.sh.parent;
+        this.real.upper[side].updateWorldMatrix(true, false);
+        _ikM.copy(sp.matrixWorld).invert();
+        X.sh.setFromMatrixPosition(this.real.upper[side].matrixWorld).applyMatrix4(_ikM).sub(arm.sh.position); X.seen = true;
+      }
+      if (a.w < 0.5) continue;
       const hand = this.real.hand[side]; hand.updateWorldMatrix(true, false);
       const err = _ikD.copy(a.world).sub(_ikT.setFromMatrixPosition(hand.matrixWorld));
       const sp = this.arm[side].sh.parent;
